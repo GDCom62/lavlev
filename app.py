@@ -2,9 +2,9 @@ import datetime
 import gspread
 import pandas as pd
 from oauth2client.service_account import ServiceAccountCredentials
+import os
 
 # 1. Configuração de Acesso ao Google Sheets
-# Lembre-se de baixar seu arquivo JSON de credenciais do Google Cloud Console
 CONEXAO_JSON = "suas-credenciais.json" 
 NOME_PLANILHA = "Controle_Lavanderia"
 
@@ -14,88 +14,172 @@ def conectar_sheets():
     cliente = gspread.authorize(credenciais)
     return cliente.open(NOME_PLANILHA)
 
-# 2. Função para Inserir Dados em Qualquer Setor
+def limpar_tela():
+    os.system('cls' if os.name == 'nt' else 'clear')
+
+# 2. Função para Gravação de Dados
 def registrar_producao(setor, dados):
-    """
-    setor: 'Lavagem', 'Lavados', 'Secagem', 'Pesagem' ou 'Dobragem'
-    dados: Lista com os valores na ordem exata das colunas
-    """
     try:
         planilha = conectar_sheets()
         aba = planilha.worksheet(setor)
         aba.append_row(dados)
-        print(f"✅ Dados registrados com sucesso no setor: {setor}!")
+        print(f"\n✅ Dados registrados com sucesso no setor {setor.upper()}!")
     except Exception as e:
-        print(f"❌ Erro ao registrar dados: {e}")
+        print(f"\n❌ Erro ao conectar ou gravar no Google Sheets: {e}")
+    input("\nPressione [ENTER] para voltar ao menu...")
 
-# 3. Função de Análise e Resumo de Produção Individual
+# 3. Função de Dashboard e Análise
 def gerar_resumo_executantes():
-    planilha = conectar_sheets()
-    setores = ["Lavagem", "Lavados", "Secagem", "Pesagem", "Dobragem"]
-    df_geral = []
-
-    print("\n📊 Buscando dados para análise de produção...")
-    
-    for setor in setores:
-        aba = planilha.worksheet(setor)
-        dados = aba.get_all_records()
-        if dados:
-            df = pd.DataFrame(dados)
-            # Padroniza o nome da coluna do funcionário para consolidação
-            df = df.rename(columns={"Nome Executante": "Executante"})
-            df["Setor"] = setor
-            df_geral.append(df[["Executante", "Setor"]])
-
-    if not df_geral:
-        print("Nenhum dado encontrado para gerar o resumo.")
-        return
-
-    # Consolida todos os setores em um único DataFrame
-    df_consolidado = pd.concat(df_geral, ignore_index=True)
-
-    # Gera a matriz de produtividade (Quantidade de ações por setor para cada executante)
-    resumo = df_consolidado.groupby(["Executante", "Setor"]).size().unstack(fill_value=0)
-    
-    # Adiciona total de ordens finalizadas por ele
-    resumo["Total Geral"] = resumo.sum(axis=1)
-    
-    print("\n================ RESUMO DE PRODUÇÃO INDIVIDUAL ================")
-    print(resumo.to_string())
-    print("===============================================================")
-    
-    # Opcional: Salvar o resumo em uma aba própria na planilha chamada 'Resumo'
+    limpar_tela()
+    print("📊 Buscando dados e gerando análise de produção individual...")
     try:
-        aba_resumo = planilha.worksheet("Resumo")
-        aba_resumo.clear()
-        # Atualiza o cabeçalho e os dados
-        aba_resumo.update([resumo.reset_index().columns.values.tolist()] + resumo.reset_index().values.tolist())
-        print("🔄 Aba 'Resumo' atualizada diretamente no Google Sheets!")
-    except gspread.exceptions.WorksheetNotFound:
-        # Cria a aba caso ela não exista
-        aba_resumo = planilha.add_worksheet(title="Resumo", rows="100", cols="10")
-        aba_resumo.update([resumo.reset_index().columns.values.tolist()] + resumo.reset_index().values.tolist())
-        print("✨ Aba 'Resumo' criada e atualizada no Google Sheets!")
+        planilha = conectar_sheets()
+        setores = ["Lavagem", "Lavados", "Secagem", "Pesagem", "Dobragem"]
+        df_geral = []
 
-# ==============================================================================
-# EXEMPLOS DE USO NO DIA A DIA
-# ==============================================================================
-if __name__ == "__main__":
-    data_hoje = datetime.date.today().strftime("%d/%m/%Y")
+        for setor in setores:
+            aba = planilha.worksheet(setor)
+            dados = aba.get_all_records()
+            if dados:
+                df = pd.DataFrame(dados)
+                # Padroniza a coluna de funcionário para consolidação
+                df = df.rename(columns={"Nome Executante": "Executante"})
+                df["Setor"] = setor
+                df_geral.append(df[["Executante", "Setor"]])
 
-    # Exemplo 1: Registrando uma lavagem
-    # Colunas: Cliente, Data, Máquina, Peso, Início, Término, Nome Executante
-    dados_lavagem = ["Hotel Estrela", data_hoje, "MÁQUINA 02", "45kg", "08:00", "09:15", "Carlos Silva"]
-    registrar_producao("Lavagem", dados_lavagem)
+        if not df_geral:
+            print("\n⚠️ Nenhum dado encontrado em nenhuma aba para gerar o resumo.")
+            input("\nPressione [ENTER] para voltar...")
+            return
 
-    # Exemplo 2: Registrando uma pesagem (com filtro Normal/Relave)
-    # Colunas: Cliente, Data, Pesagem, Nome Executante, Tipo (Normal/Relave)
-    dados_pesagem = ["Hospital São Lucas", data_hoje, "120kg", "Ana Souza", "Normal"]
-    registrar_producao("Pesagem", dados_pesagem)
+        # Consolida e agrupa os dados
+        df_consolidado = pd.concat(df_geral, ignore_index=True)
+        resumo = df_consolidado.groupby(["Executante", "Setor"]).size().unstack(fill_value=0)
+        resumo["Total Geral"] = resumo.sum(axis=1)
+        
+        # Exibe o resultado formatado na tela
+        print("\n===============================================================")
+        print("                RESUMO DE PRODUÇÃO INDIVIDUAL                ")
+        print("===============================================================")
+        print(resumo.to_string())
+        print("===============================================================")
+        
+        # Atualiza a aba 'Resumo' no Google Sheets para os gestores acompanharem de fora
+        try:
+            aba_resumo = planilha.worksheet("Resumo")
+            aba_resumo.clear()
+            aba_resumo.update([resumo.reset_index().columns.values.tolist()] + resumo.reset_index().values.tolist())
+            print("🔄 Aba 'Resumo' sincronizada com sucesso no Google Sheets!")
+        except gspread.exceptions.WorksheetNotFound:
+            aba_resumo = planilha.add_worksheet(title="Resumo", rows="100", cols="10")
+            aba_resumo.update([resumo.reset_index().columns.values.tolist()] + resumo.reset_index().values.tolist())
+            print("✨ Nova aba 'Resumo' criada e sincronizada no Google Sheets!")
+
+    except Exception as e:
+        print(f"❌ Erro ao gerar o resumo: {e}")
     
-    # Exemplo 3: Registrando uma dobragem com contagem de rouparia
-    # Colunas: Cliente, Data, Item Rouparia, Quantidade, Nome Executante
-    dados_dobragem = ["Pousada do Sol", data_hoje, "Lençol Casal", 35, "Carlos Silva"]
-    registrar_producao("Dobragem", dados_dobragem)
+    input("\nPressione [ENTER] para voltar ao menu...")
 
-    # Exemplo 4: Gerar relatório de desempenho
-    gerar_resumo_executantes()
+# 4. Interface de Coleta de Dados por Setor
+def menu_setores():
+    while True:
+        limpar_tela()
+        data_atual = datetime.date.today().strftime("%d/%m/%Y")
+        
+        print("=== SISTEMA DE CONTROLE DE LAVANDERIA ===")
+        print(f"Data de hoje: {data_atual}")
+        print("-----------------------------------------")
+        print("1. Setor de Lavagem")
+        print("2. Setor de Lavados")
+        print("3. Setor de Secagem")
+        print("4. Setor de Pesagem")
+        print("5. Setor de Dobragem")
+        print("6. Ver Resumo de Produção (Dashboard)")
+        print("0. Sair do Programa")
+        print("-----------------------------------------")
+        
+        opcao = input("Escolha uma opção: ").strip()
+        
+        if opcao == "0":
+            print("\nEncerrando o sistema. Até logo!")
+            break
+            
+        elif opcao == "1":
+            limpar_tela()
+            print("--- LANÇAMENTO: SETOR DE LAVAGEM ---")
+            cliente = input("Cliente: ")
+            maquina = input("Máquina (ex: M1): ")
+            peso = input("Peso (ex: 45kg): ")
+            inicio = input("Horário de Início (ex: 08:00): ")
+            termino = input("Horário de Término (ex: 09:15): ")
+            executante = input("Nome do Executante: ")
+            
+            dados = [cliente, data_atual, maquina, peso, inicio, termino, executante]
+            registrar_producao("Lavagem", dados)
+            
+        elif opcao == "2":
+            limpar_tela()
+            print("--- LANÇAMENTO: SETOR DE LAVADOS ---")
+            cliente = input("Cliente: ")
+            maquina = input("Máquina: ")
+            peso = input("Peso: ")
+            inicio = input("Horário de Início: ")
+            termino = input("Horário de Término: ")
+            executante = input("Nome do Executante: ")
+            
+            dados = [cliente, data_atual, maquina, peso, inicio, termino, executante]
+            registrar_producao("Lavados", dados)
+            
+        elif opcao == "3":
+            limpar_tela()
+            print("--- LANÇAMENTO: SETOR DE SECAGEM ---")
+            maquina = input("Máquina: ")
+            cliente = input("Cliente: ")
+            entrada = input("Horário de Entrada: ")
+            saida = input("Horário de Saída: ")
+            executante = input("Nome do Executante: ")
+            
+            dados = [maquina, cliente, data_atual, entrada, saida, executante]
+            registrar_producao("Secagem", dados)
+            
+        elif opcao == "4":
+            limpar_tela()
+            print("--- LANÇAMENTO: SETOR DE PESAGEM ---")
+            cliente = input("Cliente: ")
+            pesagem = input("Pesagem/Peso: ")
+            executante = input("Nome do Executante: ")
+            
+            # Validação do tipo de lavagem
+            while True:
+                tipo = input("Tipo de Operação (1 - Normal / 2 - Relave): ").strip()
+                if tipo == "1":
+                    tipo_texto = "Normal"
+                    break
+                elif tipo == "2":
+                    tipo_texto = "Relave"
+                    break
+                print("⚠️ Opção inválida! Digite 1 ou 2.")
+                
+            dados = [cliente, data_atual, pesagem, executante, tipo_texto]
+            registrar_producao("Pesagem", dados)
+            
+        elif opcao == "5":
+            limpar_tela()
+            print("--- LANÇAMENTO: SETOR DE DOBRAGEM ---")
+            cliente = input("Cliente: ")
+            item = input("Item da Rouparia (ex: Lençol Casal, Toalha): ")
+            qtd = input("Quantidade (Contagem): ")
+            executante = input("Nome do Executante (Filtro): ")
+            
+            dados = [cliente, data_atual, item, qtd, executante]
+            registrar_producao("Dobragem", dados)
+            
+        elif opcao == "6":
+            gerar_resumo_executantes()
+            
+        else:
+            print("\n⚠️ Opção inválida! Tente novamente.")
+            input("\nPressione [ENTER] para continuar...")
+
+if __name__ == "__main__":
+    menu_setores()
