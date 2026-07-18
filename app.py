@@ -31,9 +31,8 @@ def deletar_ultima_linha(setor):
     try:
         planilha = conectar_sheets()
         aba = planilha.worksheet(setor)
-        # Obtém todas as linhas para verificar a quantidade
         total_linhas = len(aba.get_all_values())
-        if total_linhas > 1: # Evita apagar o cabeçalho (linha 1)
+        if total_linhas > 1:
             aba.delete_rows(total_linhas)
             st.success(f"💥 O último lançamento do setor '{setor}' foi excluído com sucesso!")
         else:
@@ -49,11 +48,19 @@ st.title("🧼 Sistema de Controle de Lavanderia")
 data_lancamento = st.date_input("Data do Lançamento:", datetime.date.today())
 data_formatada = data_lancamento.strftime("%d/%m/%Y")
 
-# Novas abas incluindo Gerenciamento / Restauração
-abas = st.tabs(["Lavagem", "Lavados", "Secagem", "Pesagem", "Dobragem", "📊 Resumos e Análises", "🛠️ Histórico e Deleção"])
+# Criação explícita das abas nomeadas
+aba0, aba1, aba2, aba3, aba4, aba5, aba6 = st.tabs([
+    "Lavagem", 
+    "Lavados", 
+    "Secagem", 
+    "Pesagem", 
+    "Dobragem", 
+    "📊 Resumos e Análises", 
+    "🛠️ Histórico e Deleção"
+])
 
 # ---- ABA: LAVAGEM ----
-with abas[0]:
+with aba0:
     st.header("Lançamento - Setor de Lavagem")
     with st.form("form_lavagem", clear_on_submit=True):
         cliente = st.text_input("Cliente", key="lav_cli")
@@ -70,7 +77,7 @@ with abas[0]:
                 st.warning("Preencha os campos obrigatórios (Cliente e Executante).")
 
 # ---- ABA: LAVADOS ----
-with abas[1]:
+with aba1:
     st.header("Lançamento - Setor de Lavados")
     with st.form("form_lavados", clear_on_submit=True):
         cliente = st.text_input("Cliente", key="lvd_cli")
@@ -87,7 +94,7 @@ with abas[1]:
                 st.warning("Preencha os campos obrigatórios.")
 
 # ---- ABA: SECAGEM ----
-with abas[2]:
+with aba2:
     st.header("Lançamento - Setor de Secagem")
     with st.form("form_secagem", clear_on_submit=True):
         maquina = st.text_input("Máquina", key="sec_maq")
@@ -103,7 +110,7 @@ with abas[2]:
                 st.warning("Preencha os campos obrigatórios.")
 
 # ---- ABA: PESAGEM ----
-with abas[3]:
+with aba3:
     st.header("Lançamento - Setor de Pesagem")
     with st.form("form_pesagem", clear_on_submit=True):
         cliente = st.text_input("Cliente", key="pes_cli")
@@ -118,7 +125,7 @@ with abas[3]:
                 st.warning("Preencha os campos obrigatórios.")
 
 # ---- ABA: DOBRAGEM ----
-with abas[4]:
+with aba4:
     st.header("Lançamento - Setor de Dobragem")
     with st.form("form_dobragem", clear_on_submit=True):
         cliente = st.text_input("Cliente", key="dob_cli")
@@ -146,7 +153,7 @@ with abas[4]:
                 st.warning("Preencha Cliente e Executante antes de salvar.")
 
 # ---- ABA: RESUMOS E ANÁLISES ----
-with abas[5]:
+with aba5:
     st.header("📊 Painel Estatístico e Resumos")
     filtro_cliente = st.text_input("🔍 Filtrar Resumos por Cliente (Deixe vazio para todos)")
     
@@ -199,8 +206,8 @@ with abas[5]:
         except Exception as e:
             st.error(f"Erro ao processar relatórios: {e}")
 
-# ---- ABA: HISTÓRICO E DELEÇÃO (CORRIGIDA) ----
-with abas[6]:
+# ---- ABA: HISTÓRICO E DELEÇÃO ----
+with aba6:
     st.header("🛠️ Gerenciamento de Dados e Correções")
     st.markdown("Use esta aba para conferir os últimos lançamentos de cada setor ou apagar uma linha caso tenha sido inserida com erros.")
     
@@ -208,3 +215,4 @@ with abas[6]:
     
     if st.button(f"Visualizar Linhas de {setor_selecionado}"):
         try:
+            planilha = conectar_sheets()
