@@ -206,7 +206,7 @@ with aba5:
         except Exception as e:
             st.error(f"Erro ao processar relatórios: {e}")
 
-# ---- ABA: HISTÓRICO E DELEÇÃO (REVISADA) ----
+# ---- ABA: HISTÓRICO E DELEÇÃO ----
 with aba6:
     st.header("🛠️ Gerenciamento de Dados e Correções")
     st.markdown("Use esta aba para conferir os últimos lançamentos de cada setor ou apagar uma linha caso tenha sido inserida com erros.")
