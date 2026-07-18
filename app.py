@@ -199,7 +199,7 @@ with abas[5]:
         except Exception as e:
             st.error(f"Erro ao processar relatórios: {e}")
 
-# ---- NOVA ABA: HISTÓRICO E DELEÇÃO (RESTAURAR/CORRIGIR PLANILHA) ----
+# ---- ABA: HISTÓRICO E DELEÇÃO (CORRIGIDA) ----
 with abas[6]:
     st.header("🛠️ Gerenciamento de Dados e Correções")
     st.markdown("Use esta aba para conferir os últimos lançamentos de cada setor ou apagar uma linha caso tenha sido inserida com erros.")
