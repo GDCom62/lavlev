@@ -14,6 +14,11 @@ ITENS_DOBRAGEM = ["Lençol", "Fronha", "Capote", "Camisola", "Oleado", "Calça",
 def conectar_sheets():
     escopo = ["https://google.com", "https://googleapis.com"]
     credenciais_dict = dict(st.secrets["gcp_service_account"])
+    
+    # TRUQUE DE SEGURANÇA: Corrige quebras de linha invisíveis na chave privada automaticamente
+    if "private_key" in credenciais_dict:
+        credenciais_dict["private_key"] = credenciais_dict["private_key"].replace("\\n", "\n")
+        
     credenciais = ServiceAccountCredentials.from_json_keyfile_dict(credenciais_dict, escopo)
     cliente = gspread.authorize(credenciais)
     return cliente.open(NOME_PLANILHA)
@@ -56,7 +61,7 @@ def puxar_historico_setor(setor_selecionado):
 # Configuração da Página Web
 st.set_page_config(page_title="Controle Lavanderia", layout="wide")
 
-# Menu de Navegação na Barra Lateral (Sidebar) - Evita erros de blocos aninhados
+# Menu de Navegação na Barra Lateral (Sidebar)
 st.sidebar.title("🧼 Navegação")
 menu = st.sidebar.radio("Selecione o Setor:", [
     "Lavagem", 
@@ -221,6 +226,3 @@ elif menu == "📊 Resumos e Análises":
         except Exception as e:
             st.error(f"Erro ao processar relatórios: {e}")
 
-# ---- PÁGINA: HISTÓRICO E DELEÇÃO ----
-elif menu == "🛠️ Histórico e Deleção":
-    st.header("🛠️ Gerenciamento de Dados e Correções")
