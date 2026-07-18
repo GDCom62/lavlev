@@ -7,8 +7,8 @@ import datetime
 # Nome da sua planilha no Google Drive
 NOME_PLANILHA = "Controle_Lavanderia"
 
-# Lista de itens fixos do setor de dobragem
-ITENS_DOBRAGEM = ["Lençol", "Fronha", "Capote", "Camisola", "Oleado", "Calça", "Camisa", "Cobertor", "Colcha"]
+# Lista de itens atualizada
+ITENS_DOBRAGEM = ["Lençol", "Fronha", "Capote", "Camisola", "Oleado", "Calça", "Camisa", "Cobertor", "Colcha", "Toalha", "Traçado"]
 
 @st.cache_resource
 def conectar_sheets():
@@ -27,15 +27,30 @@ def registrar_dados(setor, dados):
     except Exception as e:
         st.error(f"❌ Erro ao gravar dados: {e}")
 
+def deletar_ultima_linha(setor):
+    try:
+        planilha = conectar_sheets()
+        aba = planilha.worksheet(setor)
+        # Obtém todas as linhas para verificar a quantidade
+        total_linhas = len(aba.get_all_values())
+        if total_linhas > 1: # Evita apagar o cabeçalho (linha 1)
+            aba.delete_rows(total_linhas)
+            st.success(f"💥 O último lançamento do setor '{setor}' foi excluído com sucesso!")
+        else:
+            st.warning(f"⚠️ Não há dados para apagar no setor '{setor}' (apenas o cabeçalho existe).")
+    except Exception as e:
+        st.error(f"❌ Erro ao deletar dados: {e}")
+
 # Interface Principal
 st.set_page_config(page_title="Controle Lavanderia", layout="wide")
 st.title("🧼 Sistema de Controle de Lavanderia")
 
-# Campo de data global (o operador pode mudar se estiver lançando dados retroativos)
+# Campo de data global
 data_lancamento = st.date_input("Data do Lançamento:", datetime.date.today())
 data_formatada = data_lancamento.strftime("%d/%m/%Y")
 
-abas = st.tabs(["Lavagem", "Lavados", "Secagem", "Pesagem", "Dobragem", "📊 Resumos e Análises"])
+# Novas abas incluindo Gerenciamento / Restauração
+abas = st.tabs(["Lavagem", "Lavados", "Secagem", "Pesagem", "Dobragem", "📊 Resumos e Análises", "🛠️ Histórico e Deleção"])
 
 # ---- ABA: LAVAGEM ----
 with abas[0]:
@@ -50,7 +65,6 @@ with abas[0]:
         
         if st.form_submit_button("Gravar Lavagem"):
             if cliente and executante:
-                # Colunas: cliente, data, maquina, peso, inicio, termino, nome executante
                 registrar_dados("Lavagem", [cliente, data_formatada, maquina, peso, inicio, termino, executante])
             else:
                 st.warning("Preencha os campos obrigatórios (Cliente e Executante).")
@@ -68,7 +82,6 @@ with abas[1]:
         
         if st.form_submit_button("Gravar Lavados"):
             if cliente and executante:
-                # Colunas: cliente, data, maquina, peso, inicio, termino, nome executante
                 registrar_dados("Lavados", [cliente, data_formatada, maquina, peso, inicio, termino, executante])
             else:
                 st.warning("Preencha os campos obrigatórios.")
@@ -85,7 +98,6 @@ with abas[2]:
         
         if st.form_submit_button("Gravar Secagem"):
             if cliente and executante:
-                # Colunas: maquina, cliente, data, entrada, saida, nome executante
                 registrar_dados("Secagem", [maquina, cliente, data_formatada, entrada, saida, executante])
             else:
                 st.warning("Preencha os campos obrigatórios.")
@@ -101,12 +113,11 @@ with abas[3]:
         
         if st.form_submit_button("Gravar Pesagem"):
             if cliente and executante:
-                # Colunas: cliente, data, pesagem, nome executante, tipo (Normal/Relave)
                 registrar_dados("Pesagem", [cliente, data_formatada, pesagem, executante, tipo])
             else:
                 st.warning("Preencha os campos obrigatórios.")
 
-# ---- ABA: DOBRAGEM (ATUALIZADA) ----
+# ---- ABA: DOBRAGEM ----
 with abas[4]:
     st.header("Lançamento - Setor de Dobragem")
     with st.form("form_dobragem", clear_on_submit=True):
@@ -114,40 +125,37 @@ with abas[4]:
         executante = st.text_input("Nome do Executante", key="dob_exe")
         
         st.markdown("### Contagem de Itens Dobrados")
-        col1, col2, col3 = st.columns(3)
+        col1, col2, col3, col4 = st.columns(4)
         
-        # Cria campos numéricos organizados para cada item da sua lista
         qtds = {}
         for i, item in enumerate(ITENS_DOBRAGEM):
-            if i % 3 == 0:
+            if i % 4 == 0:
                 with col1: qtds[item] = st.number_input(f"Qtd {item}", min_value=0, step=1, key=f"dob_{item}")
-            elif i % 3 == 1:
+            elif i % 4 == 1:
                 with col2: qtds[item] = st.number_input(f"Qtd {item}", min_value=0, step=1, key=f"dob_{item}")
-            else:
+            elif i % 4 == 2:
                 with col3: qtds[item] = st.number_input(f"Qtd {item}", min_value=0, step=1, key=f"dob_{item}")
+            else:
+                with col4: qtds[item] = st.number_input(f"Qtd {item}", min_value=0, step=1, key=f"dob_{item}")
         
         if st.form_submit_button("Gravar Dobragem"):
             if cliente and executante:
-                # Monta a linha para salvar no Sheets na ordem exata das colunas
                 linha_dobragem = [cliente, data_formatada, executante] + [int(qtds[item]) for item in ITENS_DOBRAGEM]
                 registrar_dados("Dobragem", linha_dobragem)
             else:
                 st.warning("Preencha Cliente e Executante antes de salvar.")
 
-# ---- ABA: RESUMOS E ANÁLISES (ATUALIZADA) ----
+# ---- ABA: RESUMOS E ANÁLISES ----
 with abas[5]:
     st.header("📊 Painel Estatístico e Resumos")
-    
-    # Filtros na tela para ajudar a gerência
-    filtro_cliente = st.text_input("🔍 Filtrar Resumos por Cliente (Deixe vazio para ver todos)")
+    filtro_cliente = st.text_input("🔍 Filtrar Resumos por Cliente (Deixe vazio para todos)")
     
     if st.button("Gerar / Atualizar Relatórios"):
         try:
             planilha = conectar_sheets()
-            
-            # --- 1. RESUMO GERAL DE PRODUTIVIDADE INDIVIDUAL (AÇÕES POR SETOR) ---
             setores = ["Lavagem", "Lavados", "Secagem", "Pesagem", "Dobragem"]
             df_geral = []
+            
             for setor in setores:
                 dados = planilha.worksheet(setor).get_all_records()
                 if dados:
@@ -166,25 +174,21 @@ with abas[5]:
                 resumo_func["Total Geral"] = resumo_func.sum(axis=1)
                 st.dataframe(resumo_func, use_container_width=True)
             else:
-                st.info("Nenhum dado encontrado para os critérios selecionados.")
+                st.info("Nenhum dado encontrado.")
 
-            # --- 2. RESUMO DE DOBRAGEM: SOMA DE PEÇAS POR CLIENTE ---
             st.subheader("2. Total de Peças Dobradas por Cliente e Executante")
             dados_dobragem = planilha.worksheet("Dobragem").get_all_records()
             
             if dados_dobragem:
                 df_dob = pd.DataFrame(dados_dobragem)
                 df_dob = df_dob.rename(columns={"Nome Executante": "Executante"})
-                
                 if filtro_cliente:
                     df_dob = df_dob[df_dob["Cliente"].astype(str).str.contains(filtro_cliente, case=False, na=False)]
                 
-                # Garante que as colunas de itens sejam tratadas como números para poder somar
                 for item in ITENS_DOBRAGEM:
                     if item in df_dob.columns:
                         df_dob[item] = pd.to_numeric(df_dob[item], errors='coerce').fillna(0)
                 
-                # Agrupa e soma as quantidades de cada peça específica por Cliente e Funcionário
                 colunas_agrupamento = ["Cliente", "Executante"]
                 colunas_soma = [item for item in ITENS_DOBRAGEM if item in df_dob.columns]
                 
@@ -192,10 +196,15 @@ with abas[5]:
                     resumo_pecas = df_dob.groupby(colunas_agrupamento)[colunas_soma].sum()
                     resumo_pecas["Total de Peças"] = resumo_pecas.sum(axis=1)
                     st.dataframe(resumo_pecas, use_container_width=True)
-                else:
-                    st.info("Colunas de itens não encontradas na aba Dobragem.")
-            else:
-                st.info("Nenhum dado registrado na aba de Dobragem ainda.")
-                
         except Exception as e:
             st.error(f"Erro ao processar relatórios: {e}")
+
+# ---- NOVA ABA: HISTÓRICO E DELEÇÃO (RESTAURAR/CORRIGIR PLANILHA) ----
+with abas[6]:
+    st.header("🛠️ Gerenciamento de Dados e Correções")
+    st.markdown("Use esta aba para conferir os últimos lançamentos de cada setor ou apagar uma linha caso tenha sido inserida com erros.")
+    
+    setor_selecionado = st.selectbox("Escolha o setor para verificar ou corrigir:", ["Lavagem", "Lavados", "Secagem", "Pesagem", "Dobragem"])
+    
+    if st.button(f"Visualizar Linhas de {setor_selecionado}"):
+        try:
