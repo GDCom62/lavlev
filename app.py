@@ -7,7 +7,7 @@ import datetime
 # Nome da sua planilha no Google Drive
 NOME_PLANILHA = "Controle_Lavanderia"
 
-# Lista de itens atualizada
+# Lista de itens do setor de dobragem
 ITENS_DOBRAGEM = ["Lençol", "Fronha", "Capote", "Camisola", "Oleado", "Calça", "Camisa", "Cobertor", "Colcha", "Toalha", "Traçado"]
 
 @st.cache_resource
@@ -53,16 +53,12 @@ def puxar_historico_setor(setor_selecionado):
     except Exception as e:
         st.error(f"Erro ao carregar histórico: {e}")
 
-# Interface Principal
+# Configuração da Página Web
 st.set_page_config(page_title="Controle Lavanderia", layout="wide")
-st.title("🧼 Sistema de Controle de Lavanderia")
 
-# Campo de data global
-data_lancamento = st.date_input("Data do Lançamento:", datetime.date.today())
-data_formatada = data_lancamento.strftime("%d/%m/%Y")
-
-# Criação das abas
-aba0, aba1, aba2, aba3, aba4, aba5, aba6 = st.tabs([
+# Menu de Navegação na Barra Lateral (Sidebar) - Evita erros de blocos aninhados
+st.sidebar.title("🧼 Navegação")
+menu = st.sidebar.radio("Selecione o Setor:", [
     "Lavagem", 
     "Lavados", 
     "Secagem", 
@@ -72,16 +68,22 @@ aba0, aba1, aba2, aba3, aba4, aba5, aba6 = st.tabs([
     "🛠️ Histórico e Deleção"
 ])
 
-# ---- ABA: LAVAGEM ----
-with aba0:
+st.title("🧼 Sistema de Controle de Lavanderia")
+
+# Campo de data global na barra lateral
+data_lancamento = st.sidebar.date_input("Data do Lançamento:", datetime.date.today())
+data_formatada = data_lancamento.strftime("%d/%m/%Y")
+
+# ---- PÁGINA: LAVAGEM ----
+if menu == "Lavagem":
     st.header("Lançamento - Setor de Lavagem")
     with st.form("form_lavagem", clear_on_submit=True):
-        cliente = st.text_input("Cliente", key="lav_cli")
-        maquina = st.text_input("Máquina", key="lav_maq")
-        peso = st.text_input("Peso (ex: 45kg)", key="lav_pes")
-        inicio = st.text_input("Horário de Início (ex: 08:00)", key="lav_ini")
-        termino = st.text_input("Horário de Término (ex: 09:15)", key="lav_ter")
-        executante = st.text_input("Nome do Executante", key="lav_exe")
+        cliente = st.text_input("Cliente")
+        maquina = st.text_input("Máquina")
+        peso = st.text_input("Peso (ex: 45kg)")
+        inicio = st.text_input("Horário de Início (ex: 08:00)")
+        termino = st.text_input("Horário de Término (ex: 09:15)")
+        executante = st.text_input("Nome do Executante")
         
         if st.form_submit_button("Gravar Lavagem"):
             if cliente and executante:
@@ -89,16 +91,16 @@ with aba0:
             else:
                 st.warning("Preencha os campos obrigatórios (Cliente e Executante).")
 
-# ---- ABA: LAVADOS ----
-with aba1:
+# ---- PÁGINA: LAVADOS ----
+elif menu == "Lavados":
     st.header("Lançamento - Setor de Lavados")
     with st.form("form_lavados", clear_on_submit=True):
-        cliente = st.text_input("Cliente", key="lvd_cli")
-        maquina = st.text_input("Máquina", key="lvd_maq")
-        peso = st.text_input("Peso", key="lvd_pes")
-        inicio = st.text_input("Horário de Início", key="lvd_ini")
-        termino = st.text_input("Horário de Término", key="lvd_ter")
-        executante = st.text_input("Nome do Executante", key="lvd_exe")
+        cliente = st.text_input("Cliente")
+        maquina = st.text_input("Máquina")
+        peso = st.text_input("Peso")
+        inicio = st.text_input("Horário de Início")
+        termino = st.text_input("Horário de Término")
+        executante = st.text_input("Nome do Executante")
         
         if st.form_submit_button("Gravar Lavados"):
             if cliente and executante:
@@ -106,15 +108,15 @@ with aba1:
             else:
                 st.warning("Preencha os campos obrigatórios.")
 
-# ---- ABA: SECAGEM ----
-with aba2:
+# ---- PÁGINA: SECAGEM ----
+elif menu == "Secagem":
     st.header("Lançamento - Setor de Secagem")
     with st.form("form_secagem", clear_on_submit=True):
-        maquina = st.text_input("Máquina", key="sec_maq")
-        cliente = st.text_input("Cliente", key="sec_cli")
-        entrada = st.text_input("Horário de Entrada", key="sec_ent")
-        saida = st.text_input("Horário de Saída", key="sec_sai")
-        executante = st.text_input("Nome do Executante", key="sec_exe")
+        maquina = st.text_input("Máquina")
+        cliente = st.text_input("Cliente")
+        entrada = st.text_input("Horário de Entrada")
+        saida = st.text_input("Horário de Saída")
+        executante = st.text_input("Nome do Executante")
         
         if st.form_submit_button("Gravar Secagem"):
             if cliente and executante:
@@ -122,14 +124,14 @@ with aba2:
             else:
                 st.warning("Preencha os campos obrigatórios.")
 
-# ---- ABA: PESAGEM ----
-with aba3:
+# ---- PÁGINA: PESAGEM ----
+elif menu == "Pesagem":
     st.header("Lançamento - Setor de Pesagem")
     with st.form("form_pesagem", clear_on_submit=True):
-        cliente = st.text_input("Cliente", key="pes_cli")
-        pesagem = st.text_input("Pesagem", key="pes_val")
-        executante = st.text_input("Nome do Executante", key="pes_exe")
-        tipo = st.radio("Tipo de Operação", ["Normal", "Relave"], key="pes_tipo")
+        cliente = st.text_input("Cliente")
+        pesagem = st.text_input("Pesagem")
+        executante = st.text_input("Nome do Executante")
+        tipo = st.radio("Tipo de Operação", ["Normal", "Relave"])
         
         if st.form_submit_button("Gravar Pesagem"):
             if cliente and executante:
@@ -137,12 +139,12 @@ with aba3:
             else:
                 st.warning("Preencha os campos obrigatórios.")
 
-# ---- ABA: DOBRAGEM ----
-with aba4:
+# ---- PÁGINA: DOBRAGEM ----
+elif menu == "Dobragem":
     st.header("Lançamento - Setor de Dobragem")
     with st.form("form_dobragem", clear_on_submit=True):
-        cliente = st.text_input("Cliente", key="dob_cli")
-        executante = st.text_input("Nome do Executante", key="dob_exe")
+        cliente = st.text_input("Cliente")
+        executante = st.text_input("Nome do Executante")
         
         st.markdown("### Contagem de Itens Dobrados")
         col1, col2, col3, col4 = st.columns(4)
@@ -165,8 +167,8 @@ with aba4:
             else:
                 st.warning("Preencha Cliente e Executante antes de salvar.")
 
-# ---- ABA: RESUMOS E ANÁLISES ----
-with aba5:
+# ---- PÁGINA: RESUMOS E ANÁLISES ----
+elif menu == "📊 Resumos e Análises":
     st.header("📊 Painel Estatístico e Resumos")
     filtro_cliente = st.text_input("🔍 Filtrar Resumos por Cliente (Deixe vazio para todos)")
     
@@ -219,5 +221,6 @@ with aba5:
         except Exception as e:
             st.error(f"Erro ao processar relatórios: {e}")
 
-# ---- ABA: HISTÓRICO E DELEÇÃO (ESTRUTURA BLINDADA) ----
-with aba6:
+# ---- PÁGINA: HISTÓRICO E DELEÇÃO ----
+elif menu == "🛠️ Histórico e Deleção":
+    st.header("🛠️ Gerenciamento de Dados e Correções")
