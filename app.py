@@ -48,7 +48,7 @@ st.title("🧼 Sistema de Controle de Lavanderia")
 data_lancamento = st.date_input("Data do Lançamento:", datetime.date.today())
 data_formatada = data_lancamento.strftime("%d/%m/%Y")
 
-# Criação explícita das abas nomeadas
+# Criação das abas
 aba0, aba1, aba2, aba3, aba4, aba5, aba6 = st.tabs([
     "Lavagem", 
     "Lavados", 
@@ -206,15 +206,17 @@ with aba5:
         except Exception as e:
             st.error(f"Erro ao processar relatórios: {e}")
 
-# ---- ABA: HISTÓRICO E DELEÇÃO ----
+# ---- ABA: HISTÓRICO E DELEÇÃO (REESCRITA SEM CONDICIONAIS COMPLEXOS) ----
 with aba6:
     st.header("🛠️ Gerenciamento de Dados e Correções")
     st.markdown("Use esta aba para conferir os últimos lançamentos de cada setor ou apagar uma linha caso tenha sido inserida com erros.")
     
-    setor_selecionado = st.selectbox("Escolha o setor para verificar ou corrigir:", ["Lavagem", "Lavados", "Secagem", "Pesagem", "Dobragem"])
+    setor_selecionado = st.selectbox(
+        "Escolha o setor para verificar ou corrigir:", 
+        ["Lavagem", "Lavados", "Secagem", "Pesagem", "Dobragem"]
+    )
     
-    if st.button(f"Visualizar Linhas de {setor_selecionado}"):
+    if st.button("Visualizar Linhas"):
         try:
             planilha = conectar_sheets()
             dados_setor = planilha.worksheet(setor_selecionado).get_all_records()
-            if dados_setor:
