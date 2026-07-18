@@ -40,6 +40,19 @@ def deletar_ultima_linha(setor):
     except Exception as e:
         st.error(f"❌ Erro ao deletar dados: {e}")
 
+def puxar_historico_setor(setor_selecionado):
+    try:
+        planilha = conectar_sheets()
+        dados_setor = planilha.worksheet(setor_selecionado).get_all_records()
+        df_historico = pd.DataFrame(dados_setor)
+        if df_historico.empty:
+            st.info("Aba selecionada está vazia.")
+        else:
+            st.write(f"📋 **Últimos registros encontrados em {setor_selecionado}:**")
+            st.dataframe(df_historico.tail(10), use_container_width=True)
+    except Exception as e:
+        st.error(f"Erro ao carregar histórico: {e}")
+
 # Interface Principal
 st.set_page_config(page_title="Controle Lavanderia", layout="wide")
 st.title("🧼 Sistema de Controle de Lavanderia")
@@ -206,17 +219,5 @@ with aba5:
         except Exception as e:
             st.error(f"Erro ao processar relatórios: {e}")
 
-# ---- ABA: HISTÓRICO E DELEÇÃO (REESCRITA SEM CONDICIONAIS COMPLEXOS) ----
+# ---- ABA: HISTÓRICO E DELEÇÃO (ESTRUTURA BLINDADA) ----
 with aba6:
-    st.header("🛠️ Gerenciamento de Dados e Correções")
-    st.markdown("Use esta aba para conferir os últimos lançamentos de cada setor ou apagar uma linha caso tenha sido inserida com erros.")
-    
-    setor_selecionado = st.selectbox(
-        "Escolha o setor para verificar ou corrigir:", 
-        ["Lavagem", "Lavados", "Secagem", "Pesagem", "Dobragem"]
-    )
-    
-    if st.button("Visualizar Linhas"):
-        try:
-            planilha = conectar_sheets()
-            dados_setor = planilha.worksheet(setor_selecionado).get_all_records()
