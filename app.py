@@ -1,9 +1,8 @@
 import streamlit as st
 import gspread
-from oauth2client.service_account import ServiceAccountCredentials
+from google.oauth2.service_account import Credentials
 import pandas as pd
 import datetime
-import json
 
 # Nome da sua planilha no Google Drive
 NOME_PLANILHA = "Controle_Lavanderia"
@@ -13,23 +12,24 @@ ITENS_DOBRAGEM = ["Lençol", "Fronha", "Capote", "Camisola", "Oleado", "Calça",
 
 @st.cache_resource
 def conectar_sheets():
-    escopo = ["https://google.com", "https://googleapis.com"]
+    # Definição do escopo oficial exigido pelo Google Drive e Sheets
+    escopo = [
+        "https://googleapis.com",
+        "https://googleapis.com"
+    ]
     
-    # Carrega as configurações básicas dos Secrets do Streamlit Cloud
+    # 1. Puxa os dados brutos salvos nos Secrets do Streamlit Cloud
     credenciais_dict = dict(st.secrets["gcp_service_account"])
     
-    # Algoritmo de limpeza para a chave criptográfica
+    # 2. Correção nativa e avançada de strings para chaves privadas do Google
     if "private_key" in credenciais_dict:
         pk = credenciais_dict["private_key"]
-        pk = pk.strip().replace("\\n", "\n")
-        if "-----BEGIN PRIVATE KEY-----" not in pk:
-            pk = "-----BEGIN PRIVATE KEY-----\n" + pk
-        if "-----END PRIVATE KEY-----" not in pk:
-            pk = pk + "\n-----END PRIVATE KEY-----"
-        pk = pk.replace("\n\n", "\n")
+        # Remove aspas extras nas pontas e força a quebra de linha correta no sistema operacional
+        pk = pk.strip().strip('"').strip("'").replace("\\n", "\n")
         credenciais_dict["private_key"] = pk
         
-    credenciais = ServiceAccountCredentials.from_json_keyfile_dict(credenciais_dict, escopo)
+    # 3. Conexão utilizando a biblioteca moderna Google-Auth (resolve o erro Short Substrate)
+    credenciais = Credentials.from_service_account_info(credenciais_dict, scopes=escopo)
     cliente = gspread.authorize(credenciais)
     return cliente.open(NOME_PLANILHA)
 
@@ -232,6 +232,3 @@ elif menu == "📊 Resumos e Análises":
     st.header("📊 Painel Estatístico e Resumos")
     filtro_cli = st.text_input("🔍 Filtrar Resumos por Cliente (Deixe vazio para todos)")
     if st.button("Gerar / Atualizar Relatórios"):
-        gerar_relatorios_lavanderia(filtro_cli)
-
-# ---- PÁGINA: HISTÓRICO E DELEÇÃO ----
