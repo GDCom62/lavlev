@@ -12,23 +12,17 @@ ITENS_DOBRAGEM = ["Lençol", "Fronha", "Capote", "Camisola", "Oleado", "Calça",
 
 @st.cache_resource
 def conectar_sheets():
-    # Definição do escopo oficial exigido pelo Google Drive e Sheets
     escopo = [
         "https://googleapis.com",
         "https://googleapis.com"
     ]
-    
-    # 1. Puxa os dados brutos salvos nos Secrets do Streamlit Cloud
     credenciais_dict = dict(st.secrets["gcp_service_account"])
     
-    # 2. Correção nativa e avançada de strings para chaves privadas do Google
     if "private_key" in credenciais_dict:
         pk = credenciais_dict["private_key"]
-        # Remove aspas extras nas pontas e força a quebra de linha correta no sistema operacional
         pk = pk.strip().strip('"').strip("'").replace("\\n", "\n")
         credenciais_dict["private_key"] = pk
         
-    # 3. Conexão utilizando a biblioteca moderna Google-Auth (resolve o erro Short Substrate)
     credenciais = Credentials.from_service_account_info(credenciais_dict, scopes=escopo)
     cliente = gspread.authorize(credenciais)
     return cliente.open(NOME_PLANILHA)
@@ -118,14 +112,12 @@ def gerar_relatorios_lavanderia(filtro_cliente):
                 st.info("Colunas de itens de dobragem não encontradas na planilha.")
         else:
             st.info("Nenhum registro encontrado na aba de Dobragem.")
-            
     except Exception as e:
         st.error(f"Erro ao processar relatórios: {e}")
 
 # Configuração da Página Web
 st.set_page_config(page_title="Controle Lavanderia", layout="wide")
 
-# Menu de Navegação na Barra Lateral (Sidebar)
 st.sidebar.title("🧼 Navegação")
 menu = st.sidebar.radio("Selecione o Setor:", [
     "Lavagem", 
@@ -139,7 +131,6 @@ menu = st.sidebar.radio("Selecione o Setor:", [
 
 st.title("🧼 Sistema de Controle de Lavanderia")
 
-# Campo de data global na barra lateral
 data_lancamento = st.sidebar.date_input("Data do Lançamento:", datetime.date.today())
 data_formatada = data_lancamento.strftime("%d/%m/%Y")
 
@@ -153,7 +144,6 @@ if menu == "Lavagem":
         inicio = st.text_input("Horário de Início (ex: 08:00)")
         termino = st.text_input("Horário de Término (ex: 09:15)")
         executante = st.text_input("Nome do Executante")
-        
         if st.form_submit_button("Gravar Lavagem"):
             if cliente and executante:
                 registrar_dados("Lavagem", [cliente, data_formatada, maquina, peso, inicio, termino, executante])
@@ -170,7 +160,6 @@ elif menu == "Lavados":
         inicio = st.text_input("Horário de Início")
         termino = st.text_input("Horário de Término")
         executante = st.text_input("Nome do Executante")
-        
         if st.form_submit_button("Gravar Lavados"):
             if cliente and executante:
                 registrar_dados("Lavados", [cliente, data_formatada, maquina, peso, inicio, termino, executante])
@@ -186,7 +175,6 @@ elif menu == "Secagem":
         entrada = st.text_input("Horário de Entrada")
         saida = st.text_input("Horário de Saída")
         executante = st.text_input("Nome do Executante")
-        
         if st.form_submit_button("Gravar Secagem"):
             if cliente and executante:
                 registrar_dados("Secagem", [maquina, cliente, data_formatada, entrada, saida, executante])
@@ -201,7 +189,6 @@ elif menu == "Pesagem":
         pesagem = st.text_input("Pesagem")
         executante = st.text_input("Nome do Executante")
         tipo = st.radio("Tipo de Operação", ["Normal", "Relave"])
-        
         if st.form_submit_button("Gravar Pesagem"):
             if cliente and executante:
                 registrar_dados("Pesagem", [cliente, data_formatada, pesagem, executante, tipo])
@@ -215,15 +202,13 @@ elif menu == "Dobragem":
         cliente = st.text_input("Cliente")
         executante = st.text_input("Nome do Executante")
         st.markdown("### Contagem de Itens Dobrados")
-        
         qtds = {}
         for item in ITENS_DOBRAGEM:
             qtds[item] = st.number_input(f"Quantidade de {item}:", min_value=0, step=1, key=f"dob_{item}")
-        
         if st.form_submit_button("Gravar Dobragem"):
             if cliente and executante:
                 linha_dobragem = [cliente, data_formatada, executante] + [int(qtds[it]) for it in ITENS_DOBRAGEM]
-                registrar_dados("Dobragem", linha_dobragem)
+                registrar_dados("Dobragem", branch_dobragem)
             else:
                 st.warning("Preencha Cliente e Executante antes de salvar.")
 
@@ -232,3 +217,11 @@ elif menu == "📊 Resumos e Análises":
     st.header("📊 Painel Estatístico e Resumos")
     filtro_cli = st.text_input("🔍 Filtrar Resumos por Cliente (Deixe vazio para todos)")
     if st.button("Gerar / Atualizar Relatórios"):
+        gerar_relatorios_lavanderia(filtro_cli)
+
+# ---- PÁGINA: HISTÓRICO E DELEÇÃO ----
+elif menu == "🛠️ Histórico e Deleção":
+    st.header("🛠️ Gerenciamento de Dados e Correções")
+    st.markdown("Use esta aba para conferir os últimos lançamentos de cada setor ou apagar uma linha caso tenha sido inserida com erros.")
+    setor_selecionado = st.selectbox("Escolha o setor para verificar ou corrigir:", ["Lavagem", "Lavados", "Secagem", "Pesagem", "Dobragem"])
+    if st.button("Visualizar Linhas"):
