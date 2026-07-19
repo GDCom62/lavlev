@@ -95,7 +95,7 @@ def gerar_relatorios_lavanderia(filtro_cliente):
             df_dob = pd.DataFrame(dados_dobragem)
             df_dob = df_dob.rename(columns={"Nome Executante": "Executante"})
             if filtro_cliente:
-                df_dob = df_dob[df_dob["Cliente"].astype(str).str.contains(filtro_cliente, case=False, na-False)]
+                df_dob = df_dob[df_dob["Cliente"].astype(str).str.contains(filtro_cliente, case=False, na=False)]
             
             for item in ITENS_DOBRAGEM:
                 if item in df_dob.columns:
@@ -177,6 +177,7 @@ elif menu == "Secagem":
         executante = st.text_input("Nome do Executante")
         if st.form_submit_button("Gravar Secagem"):
             if cliente and executante:
+                # Ordem correta das colunas: maquina, cliente, data, entrada, saida, nome executante
                 registrar_dados("Secagem", [maquina, cliente, data_formatada, entrada, saida, executante])
             else:
                 st.warning("Preencha os campos obrigatórios.")
@@ -223,9 +224,3 @@ elif menu == "📊 Resumos e Análises":
 elif menu == "🛠️ Histórico e Deleção":
     st.header("🛠️ Gerenciamento de Dados e Correções")
     st.markdown("Use esta aba para conferir os últimos lançamentos de cada setor ou apagar uma linha caso tenha sido inserida com erros.")
-    setor_selecionado = st.selectbox("Escolha o setor para verificar ou corrigir:", ["Lavagem", "Lavados", "Secagem", "Pesagem", "Dobragem"])
-    
-    if st.button("Visualizar Linhas"):
-        puxar_historico_setor(setor_selecionado)
-        
-    st.markdown("---")
