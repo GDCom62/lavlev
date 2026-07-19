@@ -39,21 +39,16 @@ def conectar_sheets():
             
     if credenciais_dict is not None:
         try:
-            # Algoritmo de higienização profunda para evitar RefreshError por quebra de chave
             if "private_key" in credenciais_dict:
                 pk = credenciais_dict["private_key"]
                 pk = pk.strip().strip('"').strip("'").replace("\\n", "\n")
                 
-                # Reconstrói as quebras de linha perfeitamente caso tenham sido emendadas pela web
                 conteudo_puro = pk.replace("-----BEGIN PRIVATE KEY-----", "").replace("-----END PRIVATE KEY-----", "")
                 conteudo_puro = conteudo_puro.replace("\n", "").replace("\r", "").replace(" ", "")
                 linhas_remontadas = [conteudo_puro[i:i+64] for i in range(0, len(conteudo_puro), 64)]
                 credenciais_dict["private_key"] = "-----BEGIN PRIVATE KEY-----\n" + "\n".join(linhas_remontadas) + "\n-----END PRIVATE KEY-----\n"
             
-            # Inicializa credenciais com a API moderna do Google
             credenciais = Credentials.from_service_account_info(credenciais_dict, scopes=escopo)
-            
-            # SOLUÇÃO PARA REFRESHERROR: Força a validação e atualização imediata do token com o servidor do Google
             requisicao = google.auth.transport.requests.Request()
             credenciais.refresh(requisicao)
             
@@ -231,3 +226,9 @@ elif menu == "Lavados":
 elif menu == "Secagem":
     st.header("Lançamento - Setor de Secagem")
     with st.form("form_secagem", clear_on_submit=True):
+        maquina = st.text_input("Máquina")
+        cliente = st.text_input("Cliente")
+        parent = st.text_input("Horário de Entrada")
+        saida = st.text_input("Horário de Saída")
+        executante = st.text_input("Nome do Executante")
+        if st.form_submit_button("Gravar Secagem"):
