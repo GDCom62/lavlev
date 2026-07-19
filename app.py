@@ -15,12 +15,25 @@ ITENS_DOBRAGEM = ["Lençol", "Fronha", "Capote", "Camisola", "Oleado", "Calça",
 def conectar_sheets():
     escopo = ["https://google.com", "https://googleapis.com"]
     
-    # Busca o arquivo de credenciais diretamente e de forma segura na nuvem
+    # 1. Carrega as configurações básicas dos Secrets do Streamlit Cloud
     credenciais_dict = dict(st.secrets["gcp_service_account"])
     
-    # Corrige formatações de quebra de linha da chave criptográfica automaticamente
+    # 2. ALGORITMO DE LIMPEZA PROFUNDA: Corrige o erro "Short substrate on input"
     if "private_key" in credenciais_dict:
-        credenciais_dict["private_key"] = credenciais_dict["private_key"].replace("\\n", "\n")
+        pk = credenciais_dict["private_key"]
+        
+        # Remove espaços nas pontas e normaliza quebras literais textuais "\n"
+        pk = pk.strip().replace("\\n", "\n")
+        
+        # Garante que os cabeçalhos padrão do Google existam de forma limpa
+        if "-----BEGIN PRIVATE KEY-----" not in pk:
+            pk = "-----BEGIN PRIVATE KEY-----\n" + pk
+        if "-----END PRIVATE KEY-----" not in pk:
+            pk = pk + "\n-----END PRIVATE KEY-----"
+            
+        # Remove quebras duplicadas causadas por emendas de blocos de notas
+        pk = pk.replace("\n\n", "\n")
+        credenciais_dict["private_key"] = pk
         
     credenciais = ServiceAccountCredentials.from_json_keyfile_dict(credenciais_dict, escopo)
     cliente = gspread.authorize(credenciais)
@@ -163,7 +176,7 @@ elif menu == "Dobragem":
         if st.form_submit_button("Gravar Dobragem"):
             if cliente and executante:
                 linha_dobragem = [cliente, data_formatada, executante] + [int(qtds[it]) for it in ITENS_DOBRAGEM]
-                registrar_dados("Dobragem", linha_dobragem)
+                registrar_dados("Dobragem", line_dobragem)
             else:
                 st.warning("Preencha Cliente e Executante antes de salvar.")
 
@@ -217,14 +230,3 @@ elif menu == "📊 Resumos e Análises":
                 if colunas_soma:
                     resumo_pecas = df_dob.groupby(colunas_agrupamento)[colunas_soma].sum()
                     resumo_pecas["Total de Peças"] = resumo_pecas.sum(axis=1)
-                    st.dataframe(resumo_pecas, use_container_width=True)
-        except Exception as e:
-            st.error(f"Erro ao processar relatórios: {e}")
-
-# ---- PÁGINA: HISTÓRICO E DELEÇÃO ----
-elif menu == "🛠️ Histórico e Deleção":
-    st.header("🛠️ Gerenciamento de Dados e Correções")
-    st.markdown("Use esta aba para conferir os últimos lançamentos de cada setor ou apagar uma linha caso tenha sido inserida com erros.")
-    
-    setor_selecionado = st.selectbox("Escolha o setor para verificar ou corrigir:", ["Lavagem", "Lavados", "Secagem", "Pesagem", "Dobragem"])
-    
