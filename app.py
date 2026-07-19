@@ -3,6 +3,8 @@ import gspread
 from google.oauth2.service_account import Credentials
 import pandas as pd
 import datetime
+import json
+import os
 
 # Nome da sua planilha no Google Drive
 NOME_PLANILHA = "Controle_Lavanderia"
@@ -10,32 +12,35 @@ NOME_PLANILHA = "Controle_Lavanderia"
 # Lista de itens do setor de dobragem
 ITENS_DOBRAGEM = ["Lençol", "Fronha", "Capote", "Camisola", "Oleado", "Calça", "Camisa", "Cobertor", "Colcha", "Toalha", "Traçado"]
 
-@st.cache_resource
 def conectar_sheets():
     escopo = [
         "https://googleapis.com",
         "https://googleapis.com"
     ]
-    credenciais_dict = dict(st.secrets["gcp_service_account"])
     
-    if "private_key" in credenciais_dict:
-        pk = credenciais_dict["private_key"]
-        pk = pk.strip().strip('"').strip("'").replace("\\n", "\n")
+    # Opção A: Verifica se o arquivo está salvo na mesma pasta no GitHub (se o repositório for privado)
+    if os.path.exists("lavanderia_key.json"):
+        credenciais = Credentials.from_service_account_file("lavanderia_key.json", scopes=escopo)
+        return gspread.authorize(credenciais)
         
-        # Reconstrutor de PEM para evitar erros de tamanho de linha
-        conteudo_puro = pk.replace("-----BEGIN PRIVATE KEY-----", "").replace("-----END PRIVATE KEY-----", "")
-        conteudo_puro = conteudo_puro.replace("\n", "").replace("\r", "").replace(" ", "")
-        linhas_remontadas = [conteudo_puro[i:i+64] for i in range(0, len(conteudo_puro), 64)]
-        chave_oficial = "-----BEGIN PRIVATE KEY-----\n" + "\n".join(linhas_remontadas) + "\n-----END PRIVATE KEY-----\n"
-        credenciais_dict["private_key"] = chave_oficial
-        
-    credenciais = Credentials.from_service_account_info(credenciais_dict, scopes=escopo)
-    cliente = gspread.authorize(credenciais)
-    return cliente.open(NOME_PLANILHA)
+    # Opção B: Usa o arquivo que o usuário carregou na tela do navegador
+    if "google_json_data" in st.session_state and st.session_state["google_json_data"] is not None:
+        try:
+            credenciais_dict = json.loads(st.session_state["google_json_data"])
+            credenciais = Credentials.from_service_account_info(credenciais_dict, scopes=escopo)
+            return gspread.authorize(credenciais)
+        except Exception:
+            return None
+            
+    return None
 
 def registrar_dados(setor, dados):
+    cliente_sheet = conectar_sheets()
+    if cliente_sheet is None:
+        st.error("❌ Erro de Autenticação: Por favor, envie o arquivo .json na barra lateral primeiro.")
+        return
     try:
-        planilha = conectar_sheets()
+        planilha = cliente_sheet
         aba = planilha.worksheet(setor)
         aba.append_row(dados)
         st.success(f"✅ Dados gravados com sucesso no setor {setor}!")
@@ -43,8 +48,12 @@ def registrar_dados(setor, dados):
         st.error(f"❌ Erro ao gravar dados: {e}")
 
 def deletar_ultima_linha(setor):
+    cliente_sheet = conectar_sheets()
+    if cliente_sheet is None:
+        st.error("❌ Envie o arquivo .json na barra lateral primeiro.")
+        return
     try:
-        planilha = conectar_sheets()
+        planilha = cliente_sheet
         aba = planilha.worksheet(setor)
         total_linhas = len(aba.get_all_values())
         if total_linhas > 1:
@@ -56,8 +65,12 @@ def deletar_ultima_linha(setor):
         st.error(f"❌ Erro ao deletar dados: {e}")
 
 def puxar_historico_setor(setor_selecionado):
+    cliente_sheet = conectar_sheets()
+    if cliente_sheet is None:
+        st.info("Aguardando o envio do arquivo .json na barra lateral para carregar dados.")
+        return
     try:
-        planilha = conectar_sheets()
+        planilha = cliente_sheet
         dados_setor = planilha.worksheet(setor_selecionado).get_all_records()
         df_historico = pd.DataFrame(dados_setor)
         if df_historico.empty:
@@ -69,8 +82,12 @@ def puxar_historico_setor(setor_selecionado):
         st.error(f"Erro ao carregar histórico: {e}")
 
 def gerar_relatorios_lavanderia(filtro_cliente):
+    cliente_sheet = conectar_sheets()
+    if cliente_sheet is None:
+        st.info("Aguardando o envio do arquivo .json na barra lateral para gerar relatórios.")
+        return
     try:
-        planilha = conectar_sheets()
+        planilha = cliente_sheet
         setores = ["Lavagem", "Lavados", "Secagem", "Pesagem", "Dobragem"]
         df_geral = []
         
@@ -124,6 +141,7 @@ def gerar_relatorios_lavanderia(filtro_cliente):
 # Configuração da Página Web
 st.set_page_config(page_title="Controle Lavanderia", layout="wide")
 
+# Menu de Navegação Lateral
 st.sidebar.title("🧼 Navegação")
 menu = st.sidebar.radio("Selecione o Setor:", [
     "Lavagem", 
@@ -135,10 +153,20 @@ menu = st.sidebar.radio("Selecione o Setor:", [
     "🛠️ Histórico e Deleção"
 ])
 
-st.title("🧼 Sistema de Controle de Lavanderia")
+# === ÁREA DE CHAVE INJECTÁVEL SEM ERROS ===
+st.sidebar.markdown("---")
+st.sidebar.subheader("🔑 Chave do Google Sheets")
+arquivo_carregado = st.sidebar.file_uploader("Envie seu arquivo .json do Google:", type=["json"])
+
+if arquivo_carregado is not None:
+    conteudo_string = arquivo_carregado.getvalue().decode("utf-8")
+    st.session_state["google_json_data"] = conteudo_string
+    st.sidebar.success("🔑 Chave carregada com sucesso!")
 
 data_lancamento = st.sidebar.date_input("Data do Lançamento:", datetime.date.today())
 data_formatada = data_lancamento.strftime("%d/%m/%Y")
+
+st.title("🧼 Sistema de Controle de Lavanderia")
 
 # ---- PÁGINA: LAVAGEM ----
 if menu == "Lavagem":
@@ -206,23 +234,3 @@ elif menu == "Dobragem":
     st.header("Lançamento - Setor de Dobragem")
     with st.form("form_dobragem", clear_on_submit=True):
         cliente = st.text_input("Cliente")
-        executante = st.text_input("Nome do Executante")
-        st.markdown("### Contagem de Itens Dobrados")
-        qtds = {}
-        for item in ITENS_DOBRAGEM:
-            qtds[item] = st.number_input(f"Quantidade de {item}:", min_value=0, step=1, key=f"dob_{item}")
-        if st.form_submit_button("Gravar Dobragem"):
-            if cliente and executante:
-                linha_dobragem = [cliente, data_formatada, executante] + [int(qtds[it]) for it in ITENS_DOBRAGEM]
-                registrar_dados("Dobragem", linha_dobragem)
-            else:
-                st.warning("Preencha Cliente e Executante antes de salvar.")
-
-# ---- PÁGINA: RESUMOS E ANÁLISES ----
-elif menu == "📊 Resumos e Análises":
-    st.header("📊 Painel Estatístico e Resumos")
-    filtro_cli = st.text_input("🔍 Filtrar Resumos por Cliente (Deixe vazio para todos)")
-    if st.button("Gerar / Atualizar Relatórios"):
-        gerar_relatorios_lavanderia(filtro_cli)
-
-# ---- PÁGINA: HISTÓRICO E DELEÇÃO ----
