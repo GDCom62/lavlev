@@ -16,25 +16,16 @@ def conectar_sheets():
         "https://googleapis.com",
         "https://googleapis.com"
     ]
-    
-    # 1. Carrega as configurações dos Secrets do Streamlit Cloud
     credenciais_dict = dict(st.secrets["gcp_service_account"])
     
-    # 2. RECONSTRUTOR DE PEM: Corrige qualquer erro de colagem ou tamanho de linha
     if "private_key" in credenciais_dict:
-        raw_key = credenciais_dict["private_key"]
+        pk = credenciais_dict["private_key"]
+        pk = pk.strip().strip('"').strip("'").replace("\\n", "\n")
         
-        # Remove os cabeçalhos temporariamente para isolar o conteúdo puro da chave
-        conteudo_puro = raw_key.replace("-----BEGIN PRIVATE KEY-----", "")
-        conteudo_puro = conteudo_puro.replace("-----END PRIVATE KEY-----", "")
-        
-        # Remove absolutamente todas as quebras de linha textuais, reais e espaços
-        conteudo_puro = conteudo_puro.replace("\\n", "").replace("\n", "").replace("\r", "").replace(" ", "")
-        
-        # Remonta a chave quebrando o texto estritamente em blocos de 64 caracteres
+        # Reconstrutor de PEM para evitar erros de tamanho de linha
+        conteudo_puro = pk.replace("-----BEGIN PRIVATE KEY-----", "").replace("-----END PRIVATE KEY-----", "")
+        conteudo_puro = conteudo_puro.replace("\n", "").replace("\r", "").replace(" ", "")
         linhas_remontadas = [conteudo_puro[i:i+64] for i in range(0, len(conteudo_puro), 64)]
-        
-        # Junta tudo no formato oficial exigido pelo Google
         chave_oficial = "-----BEGIN PRIVATE KEY-----\n" + "\n".join(linhas_remontadas) + "\n-----END PRIVATE KEY-----\n"
         credenciais_dict["private_key"] = chave_oficial
         
@@ -187,12 +178,12 @@ elif menu == "Secagem":
     with st.form("form_secagem", clear_on_submit=True):
         maquina = st.text_input("Máquina")
         cliente = st.text_input("Cliente")
-        entrada = st.text_input("Horário de Entrada")
+        parent = st.text_input("Horário de Entrada")
         saida = st.text_input("Horário de Saída")
         executante = st.text_input("Nome do Executante")
         if st.form_submit_button("Gravar Secagem"):
             if cliente and executante:
-                registrar_dados("Secagem", [maquina, cliente, data_formatada, entrada, saida, executante])
+                registrar_dados("Secagem", [maquina, cliente, data_formatada, parent, saida, executante])
             else:
                 st.warning("Preencha os campos obrigatórios.")
 
@@ -225,3 +216,13 @@ elif menu == "Dobragem":
                 linha_dobragem = [cliente, data_formatada, executante] + [int(qtds[it]) for it in ITENS_DOBRAGEM]
                 registrar_dados("Dobragem", linha_dobragem)
             else:
+                st.warning("Preencha Cliente e Executante antes de salvar.")
+
+# ---- PÁGINA: RESUMOS E ANÁLISES ----
+elif menu == "📊 Resumos e Análises":
+    st.header("📊 Painel Estatístico e Resumos")
+    filtro_cli = st.text_input("🔍 Filtrar Resumos por Cliente (Deixe vazio para todos)")
+    if st.button("Gerar / Atualizar Relatórios"):
+        gerar_relatorios_lavanderia(filtro_cli)
+
+# ---- PÁGINA: HISTÓRICO E DELEÇÃO ----
