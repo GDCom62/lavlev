@@ -15,23 +15,17 @@ ITENS_DOBRAGEM = ["Lençol", "Fronha", "Capote", "Camisola", "Oleado", "Calça",
 def conectar_sheets():
     escopo = ["https://google.com", "https://googleapis.com"]
     
-    # 1. Carrega as configurações básicas dos Secrets do Streamlit Cloud
+    # Carrega as configurações básicas dos Secrets do Streamlit Cloud
     credenciais_dict = dict(st.secrets["gcp_service_account"])
     
-    # 2. ALGORITMO DE LIMPEZA PROFUNDA: Corrige o erro "Short substrate on input"
+    # Algoritmo de limpeza para a chave criptográfica
     if "private_key" in credenciais_dict:
         pk = credenciais_dict["private_key"]
-        
-        # Remove espaços nas pontas e normaliza quebras literais textuais "\n"
         pk = pk.strip().replace("\\n", "\n")
-        
-        # Garante que os cabeçalhos padrão do Google existam de forma limpa
         if "-----BEGIN PRIVATE KEY-----" not in pk:
             pk = "-----BEGIN PRIVATE KEY-----\n" + pk
         if "-----END PRIVATE KEY-----" not in pk:
             pk = pk + "\n-----END PRIVATE KEY-----"
-            
-        # Remove quebras duplicadas causadas por emendas de blocos de notas
         pk = pk.replace("\n\n", "\n")
         credenciais_dict["private_key"] = pk
         
@@ -73,6 +67,60 @@ def puxar_historico_setor(setor_selecionado):
             st.dataframe(df_historico.tail(10), use_container_width=True)
     except Exception as e:
         st.error(f"Erro ao carregar histórico: {e}")
+
+def gerar_relatorios_lavanderia(filtro_cliente):
+    try:
+        planilha = conectar_sheets()
+        setores = ["Lavagem", "Lavados", "Secagem", "Pesagem", "Dobragem"]
+        df_geral = []
+        
+        for setor in setores:
+            dados = planilha.worksheet(setor).get_all_records()
+            if dados:
+                df = pd.DataFrame(dados)
+                df = df.rename(columns={"Nome Executante": "Executante"})
+                if filtro_cliente:
+                    df = df[df["Cliente"].astype(str).str.contains(filtro_cliente, case=False, na=False)]
+                df["Setor"] = setor
+                if "Executante" in df.columns:
+                    df_geral.append(df[["Executante", "Setor"]])
+
+        st.subheader("1. Quantidade de Operações por Funcionário / Setor")
+        if df_geral:
+            df_consolidado = pd.concat(df_geral, ignore_index=True)
+            resumo_func = df_consolidado.groupby(["Executante", "Setor"]).size().unstack(fill_value=0)
+            resumo_func["Total Geral"] = resumo_func.sum(axis=1)
+            st.dataframe(resumo_func, use_container_width=True)
+        else:
+            st.info("Nenhum dado encontrado para o resumo de operações.")
+
+        st.subheader("2. Total de Peças Dobradas por Cliente e Executante")
+        dados_dobragem = planilha.worksheet("Dobragem").get_all_records()
+        
+        if dados_dobragem:
+            df_dob = pd.DataFrame(dados_dobragem)
+            df_dob = df_dob.rename(columns={"Nome Executante": "Executante"})
+            if filtro_cliente:
+                df_dob = df_dob[df_dob["Cliente"].astype(str).str.contains(filtro_cliente, case=False, na=False)]
+            
+            for item in ITENS_DOBRAGEM:
+                if item in df_dob.columns:
+                    df_dob[item] = pd.to_numeric(df_dob[item], errors='coerce').fillna(0)
+            
+            colunas_agrupamento = ["Cliente", "Executante"]
+            colunas_soma = [item for item in ITENS_DOBRAGEM if item in df_dob.columns]
+            
+            if colunas_soma:
+                resumo_pecas = df_dob.groupby(colunas_agrupamento)[colunas_soma].sum()
+                resumo_pecas["Total de Peças"] = resumo_pecas.sum(axis=1)
+                st.dataframe(resumo_pecas, use_container_width=True)
+            else:
+                st.info("Colunas de itens de dobragem não encontradas na planilha.")
+        else:
+            st.info("Nenhum registro encontrado na aba de Dobragem.")
+            
+    except Exception as e:
+        st.error(f"Erro ao processar relatórios: {e}")
 
 # Configuração da Página Web
 st.set_page_config(page_title="Controle Lavanderia", layout="wide")
@@ -166,7 +214,6 @@ elif menu == "Dobragem":
     with st.form("form_dobragem", clear_on_submit=True):
         cliente = st.text_input("Cliente")
         executante = st.text_input("Nome do Executante")
-        
         st.markdown("### Contagem de Itens Dobrados")
         
         qtds = {}
@@ -176,57 +223,15 @@ elif menu == "Dobragem":
         if st.form_submit_button("Gravar Dobragem"):
             if cliente and executante:
                 linha_dobragem = [cliente, data_formatada, executante] + [int(qtds[it]) for it in ITENS_DOBRAGEM]
-                registrar_dados("Dobragem", line_dobragem)
+                registrar_dados("Dobragem", linha_dobragem)
             else:
                 st.warning("Preencha Cliente e Executante antes de salvar.")
 
 # ---- PÁGINA: RESUMOS E ANÁLISES ----
 elif menu == "📊 Resumos e Análises":
     st.header("📊 Painel Estatístico e Resumos")
-    filtro_cliente = st.text_input("🔍 Filtrar Resumos por Cliente (Deixe vazio para todos)")
-    
+    filtro_cli = st.text_input("🔍 Filtrar Resumos por Cliente (Deixe vazio para todos)")
     if st.button("Gerar / Atualizar Relatórios"):
-        try:
-            planilha = conectar_sheets()
-            setores = ["Lavagem", "Lavados", "Secagem", "Pesagem", "Dobragem"]
-            df_geral = []
-            
-            for setor in setores:
-                dados = planilha.worksheet(setor).get_all_records()
-                if dados:
-                    df = pd.DataFrame(dados)
-                    df = df.rename(columns={"Nome Executante": "Executante"})
-                    if filtro_cliente:
-                        df = df[df["Cliente"].astype(str).str.contains(filtro_cliente, case=False, na=False)]
-                    df["Setor"] = setor
-                    if "Executante" in df.columns:
-                        df_geral.append(df[["Executante", "Setor"]])
+        gerar_relatorios_lavanderia(filtro_cli)
 
-            st.subheader("1. Quantidade de Operações por Funcionário / Setor")
-            if df_geral:
-                df_consolidado = pd.concat(df_geral, ignore_index=True)
-                resumo_func = df_consolidado.groupby(["Executante", "Setor"]).size().unstack(fill_value=0)
-                resumo_func["Total Geral"] = resumo_func.sum(axis=1)
-                st.dataframe(resumo_func, use_container_width=True)
-            else:
-                st.info("Nenhum dado encontrado.")
-
-            st.subheader("2. Total de Peças Dobradas por Cliente e Executante")
-            dados_dobragem = planilha.worksheet("Dobragem").get_all_records()
-            
-            if dados_dobragem:
-                df_dob = pd.DataFrame(dados_dobragem)
-                df_dob = df_dob.rename(columns={"Nome Executante": "Executante"})
-                if filtro_cliente:
-                    df_dob = df_dob[df_dob["Cliente"].astype(str).str.contains(filtro_cliente, case=False, na=False)]
-                
-                for item in ITENS_DOBRAGEM:
-                    if item in df_dob.columns:
-                        df_dob[item] = pd.to_numeric(df_dob[item], errors='coerce').fillna(0)
-                
-                colunas_agrupamento = ["Cliente", "Executante"]
-                colunas_soma = [item for item in ITENS_DOBRAGEM if item in df_dob.columns]
-                
-                if colunas_soma:
-                    resumo_pecas = df_dob.groupby(colunas_agrupamento)[colunas_soma].sum()
-                    resumo_pecas["Total de Peças"] = resumo_pecas.sum(axis=1)
+# ---- PÁGINA: HISTÓRICO E DELEÇÃO ----
