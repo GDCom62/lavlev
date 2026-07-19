@@ -3,9 +3,14 @@ import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 import pandas as pd
 import datetime
+import base64
+import json
 
 # Nome da sua planilha no Google Drive
 NOME_PLANILHA = "Controle_Lavanderia"
+
+# === CREDENCIAIS DO GOOGLE EM BASE64 (BLINDADO CONTRA ERROS) ===
+CREDENCIAIS_BASE64 = "ewogICJ0eXBlIjogInNlcnZpY2VfYWNjb3VudCIsCiAgInByb2plY3RfaWQiOiAibGF2YW5kZXJpYS12MjYiLAogICJwcm9qZWN0X2tleV9pZCI6ICI1ZDk0OGU1NDk2M2JmZWZjYjUxZjUxOWE5MmFjMGM4NmI3YzEyYTkiLAogICJwcml2YXRlX2tleSI6ICItLS0tLUJFR0lOIFBSSVZBVEUgS0VZLS0tLS1cbk1JSUV2QUlCQURBTkJna3Foa2lHOXcwQkFRRUZBQVNDQktZd2dnU2lBZ0VBQW9JQkFRQ20zTXVreEptUks0YkoXbkVsNmtlRTBkR0JUZjkvdUFGNDgvan野生dXQ0dTgvdC81M0owQ2l2NHB1K2d0dys2WFVlb horrificNjg3cThZSXJ6eFlzXG4ydnBqd25ReWNERXpLMDREVHpEaDhHZGoya1JrZFFJaHFNakphTVRKMHlzQ3c2M3Q0YnBUV0FlRTB2RUhScUR6XG4yS2xreloadingNxREZLNlowV0d6bVBVOGVER2tTZnRnNkZCN0F5MTNyc2lxbjYva09tU0RJZmZ4ZVJmUGcxVnZWZVxu国防ZXg3Y1V6SHNzR2ZSWXhFdlNYN3loWkg2WFhyK0FtZlxuZlZSbTF3VFhSUnVxL211YStta3dwb3ZvOVVDdlRaMHZWVHd3RkVNb2tQZER6a0dGY2dyYUhUNm9PdTZmaHlIdlxuS3NMRFF1NFJBZ01CQUFFQ2dnRUFGRUZKWFpVQi83R2lUQXBsTDI4VWdrZDc4amVJb2FNS2ZpRStxR0FicFhjVVxuNWpzZk1SclI2RGlGVnNiUFdaaHdURDF5SEVvcWdGMmtIZ2dMVEx5TUxSckIyQnIzZXBXdjAvOWlGNGlGWE0wUVxuMEF2c2FxbURlTkhmdnRkSng4OXV0aU1CajZXcEFTWjVQM3h4alZYeHZMMCExak5XUnJYTFAtOElYUlJCdmVhYVxuSjZzS3B3MlI3a3dCcU5pSGVPeXFYclZ0bEYwVVVjNUNLS0tvdUpzU203Z253T01zWTd6Z1VSdFVLRmwxazhsb1xueDZxbE9NRW1nNXNHRDY3MGIvUU54OStJNngreUJwZE1iWERlTThOWE5nbDBXM1ZnNGFrMW1NdEpKRmVENTkvaVx3XG5FemJUcFZvcWpOeW9VbjUvWUIxeVNJUVhoVVoySEcwdndCNXRkUmV3T1FLQmdRRGVMRUN2MzVYSTVjZEJpWDY3XG40NG5hR0ZiZVRKWFhkb255OHZxeXZjSHZXUmlYd1lSbVJJdWdaY3hwS3lBVis2TmlkRElHenQ5S3NYT2NDTlloXG5xcFNlclN6RWg4Z0plTXExS0hBQWxYT216TGVtT2R4czBIaHZJQ2d4VlJFdHpHa2JVMjZyeDRId0tneVIvQ2RKXG5CY2JKRjAyamIrWDZsalMvQ0RMWmhjc09RS0JnUURBUks1cjQ5WWhNM2tmNUhRbGtONWpuM210UlZoWk93b1Ncbk9obGlMOS90Q0hpcW5VYXBoR011QmpiZFUrK3ZZNW9pR1JPZ2czWS91cGVPMTNDV01QaWpBUUJqQVhZSjh2U1lcbnpYVHJTekJ2c0dTNk9YRk9pdXNJMnRQaGlmaDFjaEpOWkxvZDNCaW1pcFYxL3d5TG84N3FRQUpENTtnTG42Si9cbjR0czRUVU5BbVFLQmdHU0lFN0ZCYyt1TXhmQUMzbVQ0bmcwdGhERlhFdzlqTHpMb3hkbkdkRTk5UktvNm8wMWRQXG5WdnI2b01mcDZyZm55Tk9wRG1ZRVFBZlZhaUhGNGRjVUQvSUpISVBGaVIrNEY4bUhiNzdONGFvdFlrQ0dXQmFvXG44b1llUC9HcXMzNU15NWJBMXdoRjNNekFUalhVcXBYaFZnVHlWWUF3c0JFRzNORkFUSHJiUmtzSkFvR0FVSkozXG5wYTdzNVN6MDdYQ0hXOWJCMjIzUlI5TnZtclVyRzBoTnF0LzFMeGdGdVRuL2lycDM5YW1WQkZ0UWJtZUhDQk1LXG5McEhvMC93VjF6NWhhQTlOb3NHZ3I5ekU0cFoxK2pMZmRFQldJL24vdkNxbVdRdk9Rdit4R3lyK2UvazV3a1ViXG4yYmVLZlFCR2NoUlg1WXpZQVVOaHNHTlcwc2dyQ1B6QWNXK29zc0VDZ1lCR243cXArVWp3dTNLclVYZlVDV2Z4XG42U1U0WE9QbWtPR2FaYzBTTjNIXFQ4Z1d0ZEc0YVZyTkNQakppWHpyUmlHWktoN2lZTTUwQUhiWkt2T01HbFlcbnJ6N2ZRV3NkRlB6dHF4UFFCUTRidVlMQVdldGRxOGJQaEM4aW9TYk5jcXZveU1IVitJaHhvVkZDMUtEN2JoRUJca2krS1JwQnl3S1JveUFHUHRMSG9xQT09XG4tLS0tLUVORCBQUklWQVRFIEtFWS0tLS0tXG4iLAogICJjbGllbnRfZW1haWwiOiAibGF2bGV2QGxhdmFuZGVyaWEtdjI2LmlhbS5nc2VydmljZWFjY291bnQuY29tIiwK  "client_id": "114411858353263035553bIiwKICAiYXV0aF91cmkiOiAiaHR0cHM6Ly9hY2NvdW50cy5nb29nbGUuY29tL28vb2F1dGgyL2F1dGgiLAogICJ0b2tlbl91cmkiOiAiaHR0cHM6Ly9vYXV0aDIuZ29vZ2xlYXBpcy5jb20vdG9rZW4iLAogICJhdXRoX3Byb3ZpZGVyX3g1MDlfY2VydF91cmkiOiAiaHR0cHM6Ly93d3cuZ29vZ2xlYXBpcy5jb20vb2F1dGgyL3YxL2NlcnRzIiwKICAiY2xpZW50X3g1MDlfY2VydF91cmkiOiAiaHR0cHM6Ly93d3cuZ29vZ2xlYXBpcy5jb20vcm9ib3QvdjEvbWV0YWRhdGEveDUwOS9sYXZsZXYlNDBsYXZhbmRlcmlhLXYyNi5pYW0uZ3NlcnZpY2VhY291bnQuY29tIiwKICAidW5pdmVyc2VfZG9tYWluIjogImdvb2dsZWFwaXMuY29tIgp9"
 
 # Lista de itens do setor de dobragem
 ITENS_DOBRAGEM = ["Lençol", "Fronha", "Capote", "Camisola", "Oleado", "Calça", "Camisa", "Cobertor", "Colcha", "Toalha", "Traçado"]
@@ -13,9 +18,11 @@ ITENS_DOBRAGEM = ["Lençol", "Fronha", "Capote", "Camisola", "Oleado", "Calça",
 @st.cache_resource
 def conectar_sheets():
     escopo = ["https://google.com", "https://googleapis.com"]
-    credenciais_dict = dict(st.secrets["gcp_service_account"])
     
-    # TRUQUE DE SEGURANÇA: Corrige quebras de linha invisíveis na chave privada automaticamente
+    # Decodifica as credenciais salvas de forma direta no código
+    json_reconstruido = base64.b64decode(CREDENCIAIS_BASE64).decode('utf-8')
+    credenciais_dict = json.loads(json_reconstruido)
+    
     if "private_key" in credenciais_dict:
         credenciais_dict["private_key"] = credenciais_dict["private_key"].replace("\\n", "\n")
         
@@ -163,66 +170,3 @@ elif menu == "Dobragem":
             elif i % 4 == 2:
                 with col3: qtds[item] = st.number_input(f"Qtd {item}", min_value=0, step=1, key=f"dob_{item}")
             else:
-                with col4: qtds[item] = st.number_input(f"Qtd {item}", min_value=0, step=1, key=f"dob_{item}")
-        
-        if st.form_submit_button("Gravar Dobragem"):
-            if cliente and executante:
-                linha_dobragem = [cliente, data_formatada, executante] + [int(qtds[item]) for item in ITENS_DOBRAGEM]
-                registrar_dados("Dobragem", linha_dobragem)
-            else:
-                st.warning("Preencha Cliente e Executante antes de salvar.")
-
-# ---- PÁGINA: RESUMOS E ANÁLISES ----
-elif menu == "📊 Resumos e Análises":
-    st.header("📊 Painel Estatístico e Resumos")
-    filtro_cliente = st.text_input("🔍 Filtrar Resumos por Cliente (Deixe vazio para todos)")
-    
-    if st.button("Gerar / Atualizar Relatórios"):
-        try:
-            planilha = conectar_sheets()
-            setores = ["Lavagem", "Lavados", "Secagem", "Pesagem", "Dobragem"]
-            df_geral = []
-            
-            for setor in setores:
-                dados = planilha.worksheet(setor).get_all_records()
-                if dados:
-                    df = pd.DataFrame(dados)
-                    df = df.rename(columns={"Nome Executante": "Executante"})
-                    if filtro_cliente:
-                        df = df[df["Cliente"].astype(str).str.contains(filtro_cliente, case=False, na=False)]
-                    df["Setor"] = setor
-                    if "Executante" in df.columns:
-                        df_geral.append(df[["Executante", "Setor"]])
-
-            st.subheader("1. Quantidade de Operações por Funcionário / Setor")
-            if df_geral:
-                df_consolidado = pd.concat(df_geral, ignore_index=True)
-                resumo_func = df_consolidado.groupby(["Executante", "Setor"]).size().unstack(fill_value=0)
-                resumo_func["Total Geral"] = resumo_func.sum(axis=1)
-                st.dataframe(resumo_func, use_container_width=True)
-            else:
-                st.info("Nenhum dado encontrado.")
-
-            st.subheader("2. Total de Peças Dobradas por Cliente e Executante")
-            dados_dobragem = planilha.worksheet("Dobragem").get_all_records()
-            
-            if dados_dobragem:
-                df_dob = pd.DataFrame(dados_dobragem)
-                df_dob = df_dob.rename(columns={"Nome Executante": "Executante"})
-                if filtro_cliente:
-                    df_dob = df_dob[df_dob["Cliente"].astype(str).str.contains(filtro_cliente, case=False, na=False)]
-                
-                for item in ITENS_DOBRAGEM:
-                    if item in df_dob.columns:
-                        df_dob[item] = pd.to_numeric(df_dob[item], errors='coerce').fillna(0)
-                
-                colunas_agrupamento = ["Cliente", "Executante"]
-                colunas_soma = [item for item in ITENS_DOBRAGEM if item in df_dob.columns]
-                
-                if colunas_soma:
-                    resumo_pecas = df_dob.groupby(colunas_agrupamento)[colunas_soma].sum()
-                    resumo_pecas["Total de Peças"] = resumo_pecas.sum(axis=1)
-                    st.dataframe(resumo_pecas, use_container_width=True)
-        except Exception as e:
-            st.error(f"Erro ao processar relatórios: {e}")
-
