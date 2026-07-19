@@ -1,6 +1,7 @@
 import streamlit as st
 import gspread
 from google.oauth2.service_account import Credentials
+import google.auth.transport.requests
 import pandas as pd
 import datetime
 import json
@@ -19,42 +20,67 @@ def conectar_sheets():
     ]
     
     credenciais = None
+    credenciais_dict = None
     
-    # Opção A: Verifica se o arquivo está salvo na mesma pasta (lavanderia_key.json)
+    # 1. Tenta carregar do arquivo físico local se ele existir
     if os.path.exists("lavanderia_key.json"):
-        credenciais = Credentials.from_service_account_file("lavanderia_key.json", scopes=escopo)
-        
-    # Opção B: Usa o arquivo carregado pelo usuário na tela do navegador
+        try:
+            with open("lavanderia_key.json", "r", encoding="utf-8") as f:
+                credenciais_dict = json.load(f)
+        except Exception:
+            pass
+            
+    # 2. Se não existir o arquivo físico, tenta carregar do arquivo enviado na tela
     elif "google_json_data" in st.session_state and st.session_state["google_json_data"] is not None:
         try:
             credenciais_dict = json.loads(st.session_state["google_json_data"])
-            credenciais = Credentials.from_service_account_info(credenciais_dict, scopes=escopo)
         except Exception:
             return None
             
-    # Se encontrou credenciais válidas, autoriza e ABRE a planilha
-    if credenciais is not None:
-        cliente = gspread.authorize(credenciais)
-        return cliente.open(NOME_PLANILHA)
-        
+    if credenciais_dict is not None:
+        try:
+            # Algoritmo de higienização profunda para evitar RefreshError por quebra de chave
+            if "private_key" in credenciais_dict:
+                pk = credenciais_dict["private_key"]
+                pk = pk.strip().strip('"').strip("'").replace("\\n", "\n")
+                
+                # Reconstrói as quebras de linha perfeitamente caso tenham sido emendadas pela web
+                conteudo_puro = pk.replace("-----BEGIN PRIVATE KEY-----", "").replace("-----END PRIVATE KEY-----", "")
+                conteudo_puro = conteudo_puro.replace("\n", "").replace("\r", "").replace(" ", "")
+                linhas_remontadas = [conteudo_puro[i:i+64] for i in range(0, len(conteudo_puro), 64)]
+                credenciais_dict["private_key"] = "-----BEGIN PRIVATE KEY-----\n" + "\n".join(linhas_remontadas) + "\n-----END PRIVATE KEY-----\n"
+            
+            # Inicializa credenciais com a API moderna do Google
+            credenciais = Credentials.from_service_account_info(credenciais_dict, scopes=escopo)
+            
+            # SOLUÇÃO PARA REFRESHERROR: Força a validação e atualização imediata do token com o servidor do Google
+            requisicao = google.auth.transport.requests.Request()
+            credenciais.refresh(requisicao)
+            
+            cliente = gspread.authorize(credenciais)
+            return cliente.open(NOME_PLANILHA)
+        except Exception as error_auth:
+            st.error(f"⚠️ Erro interno de validação do Google: {error_auth}")
+            return None
+            
     return None
 
 def registrar_dados(setor, dados):
     planilha = conectar_sheets()
     if planilha is None:
-        st.error("❌ Erro de Autenticação: Por favor, envie o arquivo .json na barra lateral primeiro.")
+        st.error("❌ Erro de Autenticação: Por favor, selecione ou reenvie o arquivo .json válido na barra lateral.")
         return
     try:
         aba = planilha.worksheet(setor)
         aba.append_row(dados)
         st.success(f"✅ Dados gravados com sucesso no setor {setor}!")
     except Exception as e:
-        st.error(f"❌ Erro ao gravar dados: {e}")
+        st.error(f"❌ Erro ao gravar dados no Sheets: {e}")
 
 def deletar_ultima_linha(setor):
     planilha = conectar_sheets()
     if planilha is None:
-        st.error("❌ Envie o arquivo .json na barra lateral primeiro.")
+        st.error("❌ Envie o arquivo .json válido na barra lateral primeiro.")
         return
     try:
         aba = planilha.worksheet(setor)
@@ -70,7 +96,7 @@ def deletar_ultima_linha(setor):
 def puxar_historico_setor(setor_selecionado):
     planilha = conectar_sheets()
     if planilha is None:
-        st.info("Aguardando o envio do arquivo .json na barra lateral para carregar dados.")
+        st.info("Aguardando o envio de um arquivo .json válido na barra lateral.")
         return
     try:
         dados_setor = planilha.worksheet(setor_selecionado).get_all_records()
@@ -86,7 +112,7 @@ def puxar_historico_setor(setor_selecionado):
 def gerar_relatorios_lavanderia(filtro_cliente):
     planilha = conectar_sheets()
     if planilha is None:
-        st.info("Aguardando o envio do arquivo .json na barra lateral para gerar relatórios.")
+        st.info("Aguardando o envio de um arquivo .json válido na barra lateral.")
         return
     try:
         setores = ["Lavagem", "Lavados", "Secagem", "Pesagem", "Dobragem"]
@@ -205,33 +231,3 @@ elif menu == "Lavados":
 elif menu == "Secagem":
     st.header("Lançamento - Setor de Secagem")
     with st.form("form_secagem", clear_on_submit=True):
-        maquina = st.text_input("Máquina")
-        cliente = st.text_input("Cliente")
-        parent = st.text_input("Horário de Entrada")
-        saida = st.text_input("Horário de Saída")
-        executante = st.text_input("Nome do Executante")
-        if st.form_submit_button("Gravar Secagem"):
-            if cliente and executante:
-                registrar_dados("Secagem", [maquina, cliente, data_formatada, parent, saida, executante])
-            else:
-                st.warning("Preencha os campos obrigatórios.")
-
-# ---- PÁGINA: PESAGEM ----
-elif menu == "Pesagem":
-    st.header("Lançamento - Setor de Pesagem")
-    with st.form("form_pesagem", clear_on_submit=True):
-        cliente = st.text_input("Cliente")
-        pesagem = st.text_input("Pesagem")
-        executante = st.text_input("Nome do Executante")
-        tipo = st.radio("Tipo de Operação", ["Normal", "Relave"])
-        if st.form_submit_button("Gravar Pesagem"):
-            if cliente and executante:
-                registrar_dados("Pesagem", [cliente, data_formatada, pesagem, executante, tipo])
-            else:
-                st.warning("Preencha os campos obrigatórios.")
-
-# ---- PÁGINA: DOBRAGEM ----
-elif menu == "Dobragem":
-    st.header("Lançamento - Setor de Dobragem")
-    with st.form("form_dobragem", clear_on_submit=True):
-        cliente = st.text_input("Cliente")
