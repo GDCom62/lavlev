@@ -226,5 +226,5 @@ elif menu == "🛠️ Histórico e Deleção":
     st.header("🛠️ Gerenciamento de Dados e Correções")
     st.markdown("Use esta aba para conferir os últimos lançamentos de cada setor ou apagar uma linha caso tenha sido inserida com erros.")
     
-    setor_selecionado = st.selectbox(
-        "Escolha o setor para verificar ou corrigir:", 
+    setor_selecionado = st.selectbox("Escolha o setor para verificar ou corrigir:", ["Lavagem", "Lavados", "Secagem", "Pesagem", "Dobragem"])
+    
