@@ -163,7 +163,6 @@ def gerar_relatorios_lavanderia(filtro_cliente):
 # Configuração da Página Web
 st.set_page_config(page_title="Controle Lavanderia", layout="wide")
 
-# Menu de Navegação Lateral
 st.sidebar.title("🧼 Navegação")
 menu = st.sidebar.radio("Selecione o Setor:", [
     "Lavagem", 
@@ -232,3 +231,4 @@ elif menu == "Secagem":
         saida = st.text_input("Horário de Saída")
         executante = st.text_input("Nome do Executante")
         if st.form_submit_button("Gravar Secagem"):
+            if cliente and executante:
