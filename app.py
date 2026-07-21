@@ -5,7 +5,7 @@ import requests
 
 ITENS_DOBRAGEM = ["Lençol", "Fronha", "Capote", "Camisola", "Oleado", "Calça", "Camisa", "Cobertor", "Colcha", "Toalha", "Traçado"]
 
-def registrar_dados_api(spreadsheet_id, api_key, setor, dados): 
+def registrar_dados_api(spreadsheet_id, api_key, setor, dados):
     try:
         # URL Oficial corrigida do Google Sheets v4 API
         url = f"https://googleapis.com{spreadsheet_id}/values/{setor}:append"
