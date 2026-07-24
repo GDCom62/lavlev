@@ -206,7 +206,7 @@ def pag_correcoes(dt):
         st.error(f"Erro ao carregar dados: {e}")
         df = pd.DataFrame()
     finally:
-        if 'conexao' in locals(): conexao.close()
+        if 'conexao' in locals(): conexao.close() 
     
     if df.empty:
         st.info("Nenhum registro encontrado neste setor.")
