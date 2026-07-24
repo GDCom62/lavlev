@@ -225,10 +225,3 @@ def pag_correcoes(dt):
                 deletar_registro_sql(s, id_selecionado)
                 
         with col_inputs:
-            novo_c = st.text_input("Novo Nome do Cliente (Deixe vazio se for apenas deletar)")
-            novo_e = st.text_input("Novo Nome do Executante (Deixe vazio se for apenas deletar)")
-            if st.button("✏️ Salvar Alterações", type="primary", use_container_width=True):
-                if novo_c and novo_e:
-                    editar_registro_sql(s, id_selecionado, novo_c, novo_e)
-                else:
-                    st.warning("⚠️ Para editar, preencha o Novo Cliente e o Novo Executante.")
