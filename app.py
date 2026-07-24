@@ -1,180 +1,203 @@
 import streamlit as st
 import pandas as pd
 import datetime
-import requests
+import psycopg2
 
 ITENS_DOBRAGEM = ["Lençol", "Fronha", "Capote", "Camisola", "Oleado", "Calça", "Camisa", "Cobertor", "Colcha", "Toalha", "Traçado"]
 
-def registrar_dados_api(spreadsheet_id, api_key, setor, dados):
-    try:
-        # URL Oficial corrigida do Google Sheets v4 API
-        url = f"https://googleapis.com{spreadsheet_id}/values/{setor}:append"
-        params = {"valueInputOption": "USER_ENTERED", "key": api_key}
-        payload = {"values": [dados]}
-        
-        resposta = requests.post(url, params=params, json=payload)
-        if resposta.status_code == 200:
-            st.success(f"✅ Gravado com sucesso em {setor}!")
-        else:
-            st.error(f"❌ Erro na API do Google: {resposta.text}")
-    except Exception as e:
-        st.error(f"❌ Erro ao conectar: {e}")
+# --- CONEXÃO COM O BANCO DE DADOS ---
+def conectar_banco(db_uri):
+    return psycopg2.connect(db_uri)
 
-def puxar_historico_api(spreadsheet_id, api_key, setor):
+# Gravação Genérica no Banco SQL
+def registrar_dados_sql(db_uri, tabela, colunas, dados):
     try:
-        url = f"https://googleapis.com{spreadsheet_id}/values/{setor}!A1:Z100"
-        params = {"key": api_key}
-        resposta = requests.get(url, params=params)
+        conexao = conectar_banco(db_uri)
+        cursor = conexao.cursor()
         
-        if resposta.status_code == 200:
-            dados = resposta.json().get("values", [])
-            if len(dados) <= 1:
-                st.info("Aba vazia ou apenas com cabeçalho.")
-            else:
-                df = pd.DataFrame(dados[1:], columns=dados[0])
-                st.dataframe(df.tail(10), use_container_width=True)
-        else:
-            st.error(f"❌ Erro ao buscar histórico: {resposta.text}")
+        placeholders = ", ".join(["%s"] * len(dados))
+        colunas_str = ", ".join(colunas)
+        query = f"INSERT INTO {tabela} ({colunas_str}) VALUES ({placeholders})"
+        
+        cursor.execute(query, dados)
+        conexao.commit()
+        st.success(f"✅ Gravado com sucesso em {tabela.capitalize()}!")
     except Exception as e:
-        st.error(f"Erro: {e}")
+        st.error(f"❌ Erro ao salvar no banco: {e}")
+    finally:
+        if 'cursor' in locals(): cursor.close()
+        if 'conexao' in locals(): conexao.close()
 
-def gerar_relatorios_api(spreadsheet_id, api_key, filtro_cliente):
+# Puxa o histórico de um setor específico
+def puxar_historico_sql(db_uri, tabela):
     try:
-        setores = ["Lavagem", "Lavados", "Secagem", "Pesagem", "Dobragem"]
+        conexao = conectar_banco(db_uri)
+        query = f"SELECT * FROM {tabela} ORDER BY id DESC LIMIT 10"
+        df = pd.read_sql_query(query, conexao)
+        
+        if df.empty:
+            st.info("Tabela vazia sem registros.")
+        else:
+            st.dataframe(df, use_container_width=True)
+    except Exception as e:
+        st.error(f"❌ Erro ao buscar histórico: {e}")
+    finally:
+        if 'conexao' in locals(): conexao.close()
+
+# Gera relatórios consolidados usando queries SQL
+def gerar_relatorios_sql(db_uri, filtro_cliente):
+    try:
+        conexao = conectar_banco(db_uri)
+        setores = ["lavagem", "lavados", "secagem", "pesagem", "dobragem"]
         df_geral = []
         
         for s in setores:
-            url = f"https://googleapis.com{spreadsheet_id}/values/{s}!A1:Z500"
-            resposta = requests.get(url, params={"key": api_key})
-            if resposta.status_code == 200:
-                dados = resposta.json().get("values", [])
-                if len(dados) > 1:
-                    df = pd.DataFrame(dados[1:], columns=dados[0])
-                    df = df.rename(columns={"Nome Executante": "Executante"})
-                    if filtro_cliente:
-                        df = df[df["Cliente"].astype(str).str.contains(filtro_cliente, case=False, na=False)]
-                    df["Setor"] = s
-                    if "Executante" in df.columns:
-                        df_geral.append(df[["Executante", "Setor"]])
+            query = f"SELECT executante, '{s}' as setor FROM {s}"
+            if filtro_cliente:
+                query += f" WHERE cliente ILIKE %s"
+                df = pd.read_sql_query(query, conexao, params=(f"%{filtro_cliente}%",))
+            else:
+                df = pd.read_sql_query(query, conexao)
+                
+            if not df.empty:
+                df_geral.append(df)
 
         st.subheader("1. Quantidade de Operações por Funcionário / Setor")
         if df_geral:
-            res = pd.concat(df_geral, ignore_index=True).groupby(["Executante", "Setor"]).size().unstack(fill_value=0)
+            res = pd.concat(df_geral, ignore_index=True).groupby(["executante", "setor"]).size().unstack(fill_value=0)
             res["Total Geral"] = res.sum(axis=1)
             st.dataframe(res, use_container_width=True)
         else:
             st.info("Nenhum dado encontrado para gerar o resumo de funcionários.")
 
         st.subheader("2. Total de Peças Dobradas por Cliente e Executante")
-        url_dob = f"https://googleapis.com{spreadsheet_id}/values/Dobragem!A1:Z500"
-        resp_dob = requests.get(url_dob, params={"key": api_key})
-        if resp_dob.status_code == 200:
-            dados_dob = resp_dob.json().get("values", [])
-            if len(dados_dob) > 1:
-                df_dob = pd.DataFrame(dados_dob[1:], columns=dados_dob[0]).rename(columns={"Nome Executante": "Executante"})
-                if filtro_cliente:
-                    df_dob = df_dob[df_dob["Cliente"].astype(str).str.contains(filtro_cliente, case=False, na=False)]
-                for it in ITENS_DOBRAGEM:
-                    if it in df_dob.columns:
-                        df_dob[it] = pd.to_numeric(df_dob[it], errors='coerce').fillna(0)
-                cols_soma = [it for it in ITENS_DOBRAGEM if it in df_dob.columns]
-                if cols_soma:
-                    res_pecas = df_dob.groupby(["Cliente", "Executante"])[cols_soma].sum()
-                    res_pecas["Total de Peças"] = res_pecas.sum(axis=1)
-                    st.dataframe(res_pecas, use_container_width=True)
-            else:
-                st.info("Nenhum registro encontrado em Dobragem.")
+        cols_sql = ", ".join([it.lower().replace("ç", "c").replace("ã", "a") for it in ITENS_DOBRAGEM])
+        query_dob = f"SELECT cliente, executante, {cols_sql} FROM dobragem"
+        
+        if filtro_cliente:
+            query_dob += " WHERE cliente ILIKE %s"
+            df_dob = pd.read_sql_query(query_dob, conexao, params=(f"%{filtro_cliente}%",))
+        else:
+            df_dob = pd.read_sql_query(query_dob, conexao)
+
+        if not df_dob.empty:
+            mapeamento = {it.lower().replace("ç", "c").replace("ã", "a"): it for it in ITENS_DOBRAGEM}
+            df_dob = df_dob.rename(columns=mapeamento)
+            
+            res_pecas = df_dob.groupby(["Cliente", "executante"]).sum()
+            res_pecas["Total de Peças"] = res_pecas.sum(axis=1)
+            st.dataframe(res_pecas, use_container_width=True)
+        else:
+            st.info("Nenhum registro encontrado em Dobragem.")
+            
     except Exception as e:
         st.error(f"Erro nos relatórios: {e}")
+    finally:
+        if 'conexao' in locals(): conexao.close()
 
 # --- FORMULÁRIOS DE LANÇAMENTO ---
-def pag_lavagem(dt, sheet_id, key):
+def pag_lavagem(dt, db_uri):
     st.header("Lançamento - Setor de Lavagem")
     with st.form("f_lav", clear_on_submit=True):
         c, m, p = st.text_input("Cliente"), st.text_input("Máquina"), st.text_input("Peso (ex: 45kg)")
         i, t, e = st.text_input("Horário Início"), st.text_input("Horário Término"), st.text_input("Executante")
         if st.form_submit_button("Gravar Lavagem"):
-            if sheet_id and key:
-                if c and e: registrar_dados_api(sheet_id, key, "Lavagem", [c, dt, m, p, i, t, e])
+            if db_uri:
+                if c and e: 
+                    colunas = ["cliente", "data", "maquina", "peso", "horario_inicio", "horario_termino", "executante"]
+                    registrar_dados_sql(db_uri, "lavagem", colunas, [c, dt, m, p, i, t, e])
                 else: st.warning("Preencha Cliente e Executante.")
-            else: st.error("⚠️ Configure a Chave de API e o ID da Planilha no menu lateral.")
+            else: st.error("⚠️ Configure a String de Conexão SQL no menu lateral.")
 
-def pag_lavados(dt, sheet_id, key):
+def pag_lavados(dt, db_uri):
     st.header("Lançamento - Setor de Lavados")
     with st.form("f_lvd", clear_on_submit=True):
         c, m, p = st.text_input("Cliente"), st.text_input("Máquina"), st.text_input("Peso")
         i, t, e = st.text_input("Horário Início"), st.text_input("Horário Término"), st.text_input("Executante")
         if st.form_submit_button("Gravar Lavados"):
-            if sheet_id and key:
-                if c and e: registrar_dados_api(sheet_id, key, "Lavados", [c, dt, m, p, i, t, e])
+            if db_uri:
+                if c and e: 
+                    colunas = ["cliente", "data", "maquina", "peso", "horario_inicio", "horario_termino", "executante"]
+                    registrar_dados_sql(db_uri, "lavados", colunas, [c, dt, m, p, i, t, e])
                 else: st.warning("Preencha os campos obrigatórios.")
-            else: st.error("⚠️ Configure os dados de acesso no menu lateral.")
+            else: st.error("⚠️ Configure os dados de acesso.")
 
-def pag_secagem(dt, sheet_id, key):
+def pag_secagem(dt, db_uri):
     st.header("Lançamento - Setor de Secagem")
     with st.form("f_sec", clear_on_submit=True):
         m, c, ent, sai, e = st.text_input("Máquina"), st.text_input("Cliente"), st.text_input("Horário Entrada"), st.text_input("Horário Saída"), st.text_input("Executante")
         if st.form_submit_button("Gravar Secagem"):
-            if sheet_id and key:
-                if c and e: registrar_dados_api(sheet_id, key, "Secagem", [m, c, dt, ent, sai, e])
+            if db_uri:
+                if c and e: 
+                    colunas = ["maquina", "cliente", "data", "horario_entrada", "horario_saida", "executante"]
+                    registrar_dados_sql(db_uri, "secagem", colunas, [m, c, dt, ent, sai, e])
                 else: st.warning("Preencha os campos obrigatórios.")
-            else: st.error("⚠️ Configure os dados de acesso no menu lateral.")
+            else: st.error("⚠️ Configure os dados de acesso.")
 
-def pag_pesagem(dt, sheet_id, key):
+def pag_pesagem(dt, db_uri):
     st.header("Lançamento - Setor de Pesagem")
     with st.form("f_pes", clear_on_submit=True):
         c, p, e = st.text_input("Cliente"), st.text_input("Pesagem"), st.text_input("Executante")
         tipo = st.radio("Tipo de Operação", ["Normal", "Relave"])
         if st.form_submit_button("Gravar Pesagem"):
-            if sheet_id and key:
-                if c and e: registrar_dados_api(sheet_id, key, "Pesagem", [c, dt, p, e, tipo])
+            if db_uri:
+                if c and e: 
+                    colunas = ["cliente", "data", "pesagem", "executante", "tipo_operacao"]
+                    registrar_dados_sql(db_uri, "pesagem", colunas, [c, dt, p, e, tipo])
                 else: st.warning("Preencha os campos obrigatórios.")
-            else: st.error("⚠️ Configure os dados de acesso no menu lateral.")
+            else: st.error("⚠️ Configure os dados de acesso.")
 
-def pag_dobragem(dt, sheet_id, key):
+def pag_dobragem(dt, db_uri):
     st.header("Lançamento - Setor de Dobragem")
     with st.form("f_dob", clear_on_submit=True):
         c, e = st.text_input("Cliente"), st.text_input("Executante")
         st.markdown("### Contagem de Itens Dobrados")
         qtds = {it: st.number_input(f"Qtd {it}:", min_value=0, step=1, key=f"d_{it}") for it in ITENS_DOBRAGEM}
         if st.form_submit_button("Gravar Dobragem"):
-            if sheet_id and key:
-                if c and e: registrar_dados_api(sheet_id, key, "Dobragem", [c, dt, e] + [int(qtds[it]) for it in ITENS_DOBRAGEM])
+            if db_uri:
+                if c and e:
+                    colunas_itens = [it.lower().replace("ç", "c").replace("ã", "a") for it in ITENS_DOBRAGEM]
+                    colunas = ["cliente", "data", "executante"] + colunas_itens
+                    valores = [c, dt, e] + [int(qtds[it]) for it in ITENS_DOBRAGEM]
+                    registrar_dados_sql(db_uri, "dobragem", colunas, valores)
                 else: st.warning("Preencha Cliente e Executante.")
-            else: st.error("⚠️ Configure os dados de acesso no menu lateral.")
+            else: st.error("⚠️ Configure os dados de acesso.")
 
-def pag_analises(dt, sheet_id, key):
+def pag_analises(dt, db_uri):
     st.header("📊 Painel Estatístico e Resumos")
     filtro = st.text_input("🔍 Filtrar por Cliente (Vazio para todos)")
     if st.button("Gerar / Atualizar Relatórios"): 
-        if sheet_id and key: gerar_relatorios_api(sheet_id, key, filtro)
-        else: st.error("⚠️ Configure os dados de acesso no menu lateral.")
+        if db_uri: gerar_relatorios_sql(db_uri, filtro)
+        else: st.error("⚠️ Configure os dados de acesso.")
 
-def pag_correcoes(dt, sheet_id, key):
+def pag_correcoes(dt, db_uri):
     st.header("🛠️ Histórico de Lançamentos")
-    s = st.selectbox("Setor:", ["Lavagem", "Lavados", "Secagem", "Pesagem", "Dobragem"])
+    s = st.selectbox("Setor:", ["lavagem", "lavados", "secagem", "pesagem", "dobragem"])
     if st.button("Visualizar Últimas Linhas"): 
-        if sheet_id and key: puxar_historico_api(sheet_id, key, s)
+        if db_uri: puxar_historico_sql(db_uri, s)
         else: st.error("⚠️ Configure os dados de acesso no menu lateral.")
 
-# --- CORPO PRINCIPAL ---
+# --- CORPO PRINCIPAL INTERFACE ---
 st.set_page_config(page_title="Controle Lavanderia", layout="wide")
 
-# Configurações de Conexão na Sidebar (Protegido e Dinâmico)
-st.sidebar.title("⚙️ Configurações Google")
-input_api_key = st.sidebar.text_input("Chave de API do Google:", type="password")
-input_sheet_id = st.sidebar.text_input("ID da Planilha (Spreadsheet ID):")
+# Configurações de Conexão na Sidebar (Banco SQL na Nuvem)
+st.sidebar.title("⚙️ Configurações Nuvem")
+input_db_uri = st.sidebar.text_input("String de Conexão SQL (PostgreSQL URI):", type="password")
 
 st.sidebar.markdown("---")
 st.sidebar.title("🧼 Navegação")
 opcoes_menu = {
-    "Lavagem": pag_lavagem, "Lavados": pag_lavados, "Secagem": pag_secagem,
-    "Pesagem": pag_pesagem, "Dobragem": pag_dobragem, "📊 Resumos e Análises": pag_analises,
+    "Lavagem": pag_lavagem, 
+    "Lavados": pag_lavados, 
+    "Secagem": pag_secagem,
+    "Pesagem": pag_pesagem, 
+    "Dobragem": pag_dobragem, 
+    "📊 Resumos e Análises": pag_analises,
     "🛠️ Histórico": pag_correcoes
 }
 menu = st.sidebar.radio("Selecione o Setor:", list(opcoes_menu.keys()))
 
-dt_global = st.sidebar.date_input("Data do Lançamento:", datetime.date.today()).strftime("%d/%m/%Y")
+dt_global = st.sidebar.date_input("Data do Lançamento:", datetime.date.today())
 
-# Executa a página enviando os parâmetros da interface de forma limpa
-opcoes_menu[menu](dt_global, input_sheet_id, input_api_key)
+# Executa a página correspondente passando os parâmetros SQL atualizados
+opcoes_menu[menu](dt_global, input_db_uri)
