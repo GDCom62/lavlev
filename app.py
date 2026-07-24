@@ -69,7 +69,7 @@ def editar_registro_sql(tabela, registro_id, novo_cliente, novo_executante):
         conexao.commit()
         
         if cursor.rowcount > 0:
-            st.success(f"✏️ Registro ID {registro_id} updated com sucesso!")
+            st.success(f"✏️ Registro ID {registro_id} atualizado com sucesso!")
             st.rerun()
         else:
             st.warning(f"⚠️ Nenhum registro encontrado com o ID {registro_id}.")
