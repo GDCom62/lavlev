@@ -5,14 +5,24 @@ import psycopg2
 
 ITENS_DOBRAGEM = ["Lençol", "Fronha", "Capote", "Camisola", "Oleado", "Calça", "Camisa", "Cobertor", "Colcha", "Toalha", "Traçado"]
 
+# --- LEITURA AUTOMÁTICA DO SEGREDO ---
+# O Streamlit busca isso direto nas configurações de 'Secrets' salvas na nuvem
+try:
+    DB_URI = st.secrets["banco_dados"]["uri"]
+except Exception:
+    DB_URI = None
+
 # --- CONEXÃO COM O BANCO DE DADOS ---
-def conectar_banco(db_uri):
-    return psycopg2.connect(db_uri)
+def conectar_banco():
+    if not DB_URI:
+        st.error("⚠️ Configuração de banco de dados não encontrada nos Secrets do Streamlit!")
+        st.stop()
+    return psycopg2.connect(DB_URI)
 
 # Gravação Genérica no Banco SQL
-def registrar_dados_sql(db_uri, tabela, colunas, dados):
+def registrar_dados_sql(tabela, colunas, dados):
     try:
-        conexao = conectar_banco(db_uri)
+        conexao = conectar_banco()
         cursor = conexao.cursor()
         
         placeholders = ", ".join(["%s"] * len(dados))
@@ -29,9 +39,9 @@ def registrar_dados_sql(db_uri, tabela, colunas, dados):
         if 'conexao' in locals(): conexao.close()
 
 # Puxa o histórico de um setor específico
-def puxar_historico_sql(db_uri, tabela):
+def puxar_historico_sql(tabela):
     try:
-        conexao = conectar_banco(db_uri)
+        conexao = conectar_banco()
         query = f"SELECT * FROM {tabela} ORDER BY id DESC LIMIT 10"
         df = pd.read_sql_query(query, conexao)
         
@@ -45,9 +55,9 @@ def puxar_historico_sql(db_uri, tabela):
         if 'conexao' in locals(): conexao.close()
 
 # Gera relatórios consolidados usando queries SQL
-def gerar_relatorios_sql(db_uri, filtro_cliente):
+def gerar_relatorios_sql(filtro_cliente):
     try:
-        conexao = conectar_banco(db_uri)
+        conexao = conectar_banco()
         setores = ["lavagem", "lavados", "secagem", "pesagem", "dobragem"]
         df_geral = []
         
@@ -96,95 +106,78 @@ def gerar_relatorios_sql(db_uri, filtro_cliente):
         if 'conexao' in locals(): conexao.close()
 
 # --- FORMULÁRIOS DE LANÇAMENTO ---
-def pag_lavagem(dt, db_uri):
+def pag_lavagem(dt):
     st.header("Lançamento - Setor de Lavagem")
     with st.form("f_lav", clear_on_submit=True):
         c, m, p = st.text_input("Cliente"), st.text_input("Máquina"), st.text_input("Peso (ex: 45kg)")
         i, t, e = st.text_input("Horário Início"), st.text_input("Horário Término"), st.text_input("Executante")
         if st.form_submit_button("Gravar Lavagem"):
-            if db_uri:
-                if c and e: 
-                    colunas = ["cliente", "data", "maquina", "peso", "horario_inicio", "horario_termino", "executante"]
-                    registrar_dados_sql(db_uri, "lavagem", colunas, [c, dt, m, p, i, t, e])
-                else: st.warning("Preencha Cliente e Executante.")
-            else: st.error("⚠️ Configure a String de Conexão SQL no menu lateral.")
+            if c and e: 
+                colunas = ["cliente", "data", "maquina", "peso", "horario_inicio", "horario_termino", "executante"]
+                registrar_dados_sql("lavagem", colunas, [c, dt, m, p, i, t, e])
+            else: st.warning("Preencha Cliente e Executante.")
 
-def pag_lavados(dt, db_uri):
+def pag_lavados(dt):
     st.header("Lançamento - Setor de Lavados")
     with st.form("f_lvd", clear_on_submit=True):
         c, m, p = st.text_input("Cliente"), st.text_input("Máquina"), st.text_input("Peso")
         i, t, e = st.text_input("Horário Início"), st.text_input("Horário Término"), st.text_input("Executante")
         if st.form_submit_button("Gravar Lavados"):
-            if db_uri:
-                if c and e: 
-                    colunas = ["cliente", "data", "maquina", "peso", "horario_inicio", "horario_termino", "executante"]
-                    registrar_dados_sql(db_uri, "lavados", colunas, [c, dt, m, p, i, t, e])
-                else: st.warning("Preencha os campos obrigatórios.")
-            else: st.error("⚠️ Configure os dados de acesso.")
+            if c and e: 
+                colunas = ["cliente", "data", "maquina", "peso", "horario_inicio", "horario_termino", "executante"]
+                registrar_dados_sql("lavados", colunas, [c, dt, m, p, i, t, e])
+            else: st.warning("Preencha os campos obrigatórios.")
 
-def pag_secagem(dt, db_uri):
+def pag_secagem(dt):
     st.header("Lançamento - Setor de Secagem")
     with st.form("f_sec", clear_on_submit=True):
         m, c, ent, sai, e = st.text_input("Máquina"), st.text_input("Cliente"), st.text_input("Horário Entrada"), st.text_input("Horário Saída"), st.text_input("Executante")
         if st.form_submit_button("Gravar Secagem"):
-            if db_uri:
-                if c and e: 
-                    colunas = ["maquina", "cliente", "data", "horario_entrada", "horario_saida", "executante"]
-                    registrar_dados_sql(db_uri, "secagem", colunas, [m, c, dt, ent, sai, e])
-                else: st.warning("Preencha os campos obrigatórios.")
-            else: st.error("⚠️ Configure os dados de acesso.")
+            if c and e: 
+                colunas = ["maquina", "cliente", "data", "horario_entrada", "horario_saida", "executante"]
+                registrar_dados_sql("secagem", colunas, [m, c, dt, ent, sai, e])
+            else: st.warning("Preencha os campos obrigatórios.")
 
-def pag_pesagem(dt, db_uri):
+def pag_pesagem(dt):
     st.header("Lançamento - Setor de Pesagem")
     with st.form("f_pes", clear_on_submit=True):
         c, p, e = st.text_input("Cliente"), st.text_input("Pesagem"), st.text_input("Executante")
         tipo = st.radio("Tipo de Operação", ["Normal", "Relave"])
         if st.form_submit_button("Gravar Pesagem"):
-            if db_uri:
-                if c and e: 
-                    colunas = ["cliente", "data", "pesagem", "executante", "tipo_operacao"]
-                    registrar_dados_sql(db_uri, "pesagem", colunas, [c, dt, p, e, tipo])
-                else: st.warning("Preencha os campos obrigatórios.")
-            else: st.error("⚠️ Configure os dados de acesso.")
+            if c and e: 
+                colunas = ["cliente", "data", "pesagem", "executante", "tipo_operacao"]
+                registrar_dados_sql("pesagem", colunas, [c, dt, p, e, tipo])
+            else: st.warning("Preencha os campos obrigatórios.")
 
-def pag_dobragem(dt, db_uri):
+def pag_dobragem(dt):
     st.header("Lançamento - Setor de Dobragem")
     with st.form("f_dob", clear_on_submit=True):
         c, e = st.text_input("Cliente"), st.text_input("Executante")
         st.markdown("### Contagem de Itens Dobrados")
         qtds = {it: st.number_input(f"Qtd {it}:", min_value=0, step=1, key=f"d_{it}") for it in ITENS_DOBRAGEM}
         if st.form_submit_button("Gravar Dobragem"):
-            if db_uri:
-                if c and e:
-                    colunas_itens = [it.lower().replace("ç", "c").replace("ã", "a") for it in ITENS_DOBRAGEM]
-                    colunas = ["cliente", "data", "executante"] + colunas_itens
-                    valores = [c, dt, e] + [int(qtds[it]) for it in ITENS_DOBRAGEM]
-                    registrar_dados_sql(db_uri, "dobragem", colunas, valores)
-                else: st.warning("Preencha Cliente e Executante.")
-            else: st.error("⚠️ Configure os dados de acesso.")
+            if c and e:
+                colunas_itens = [it.lower().replace("ç", "c").replace("ã", "a") for it in ITENS_DOBRAGEM]
+                colunas = ["cliente", "data", "executante"] + colunas_itens
+                valores = [c, dt, e] + [int(qtds[it]) for it in ITENS_DOBRAGEM]
+                registrar_dados_sql("dobragem", colunas, valores)
+            else: st.warning("Preencha Cliente e Executante.")
 
-def pag_analises(dt, db_uri):
+def pag_analises(dt):
     st.header("📊 Painel Estatístico e Resumos")
     filtro = st.text_input("🔍 Filtrar por Cliente (Vazio para todos)")
     if st.button("Gerar / Atualizar Relatórios"): 
-        if db_uri: gerar_relatorios_sql(db_uri, filtro)
-        else: st.error("⚠️ Configure os dados de acesso.")
+        gerar_relatorios_sql(filtro)
 
-def pag_correcoes(dt, db_uri):
+def pag_correcoes(dt):
     st.header("🛠️ Histórico de Lançamentos")
     s = st.selectbox("Setor:", ["lavagem", "lavados", "secagem", "pesagem", "dobragem"])
     if st.button("Visualizar Últimas Linhas"): 
-        if db_uri: puxar_historico_sql(db_uri, s)
-        else: st.error("⚠️ Configure os dados de acesso no menu lateral.")
+        puxar_historico_sql(s)
 
 # --- CORPO PRINCIPAL INTERFACE ---
 st.set_page_config(page_title="Controle Lavanderia", layout="wide")
 
-# Configurações de Conexão na Sidebar (Banco SQL na Nuvem)
-st.sidebar.title("⚙️ Configurações Nuvem")
-input_db_uri = st.sidebar.text_input("String de Conexão SQL (PostgreSQL URI):", type="password")
-
-st.sidebar.markdown("---")
 st.sidebar.title("🧼 Navegação")
 opcoes_menu = {
     "Lavagem": pag_lavagem, 
@@ -197,7 +190,8 @@ opcoes_menu = {
 }
 menu = st.sidebar.radio("Selecione o Setor:", list(opcoes_menu.keys()))
 
+st.sidebar.markdown("---")
 dt_global = st.sidebar.date_input("Data do Lançamento:", datetime.date.today())
 
-# Executa a página correspondente passando os parâmetros SQL atualizados
-opcoes_menu[menu](dt_global, input_db_uri)
+# Executa a página sem precisar passar parâmetros de conexão por fora
+opcoes_menu[menu](dt_global)
