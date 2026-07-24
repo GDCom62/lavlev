@@ -6,7 +6,6 @@ import psycopg2
 ITENS_DOBRAGEM = ["Lençol", "Fronha", "Capote", "Camisola", "Oleado", "Calça", "Camisa", "Cobertor", "Colcha", "Toalha", "Traçado"]
 
 # --- LEITURA AUTOMÁTICA DO SEGREDO ---
-# O Streamlit busca isso direto nas configurações de 'Secrets' salvas na nuvem
 try:
     DB_URI = st.secrets["banco_dados"]["uri"]
 except Exception:
@@ -38,20 +37,46 @@ def registrar_dados_sql(tabela, colunas, dados):
         if 'cursor' in locals(): cursor.close()
         if 'conexao' in locals(): conexao.close()
 
-# Puxa o histórico de um setor específico
-def puxar_historico_sql(tabela):
+# Deletar um registro específico por ID
+def deletar_registro_sql(tabela, registro_id):
     try:
         conexao = conectar_banco()
-        query = f"SELECT * FROM {tabela} ORDER BY id DESC LIMIT 10"
-        df = pd.read_sql_query(query, conexao)
+        cursor = conexao.cursor()
         
-        if df.empty:
-            st.info("Tabela vazia sem registros.")
+        query = f"DELETE FROM {tabela} WHERE id = %s"
+        cursor.execute(query, (registro_id,))
+        conexao.commit()
+        
+        if cursor.rowcount > 0:
+            st.success(f"🗑️ Registro ID {registro_id} deletado com sucesso de {tabela.capitalize()}!")
+            st.rerun()
         else:
-            st.dataframe(df, use_container_width=True)
+            st.warning(f"⚠️ Nenhum registro encontrado com o ID {registro_id}.")
     except Exception as e:
-        st.error(f"❌ Erro ao buscar histórico: {e}")
+        st.error(f"❌ Erro ao deletar: {e}")
     finally:
+        if 'cursor' in locals(): cursor.close()
+        if 'conexao' in locals(): conexao.close()
+
+# Atualizar o cliente e o executante de um registro por ID
+def editar_registro_sql(tabela, registro_id, novo_cliente, novo_executante):
+    try:
+        conexao = conectar_banco()
+        cursor = conexao.cursor()
+        
+        query = f"UPDATE {tabela} SET cliente = %s, executante = %s WHERE id = %s"
+        cursor.execute(query, (novo_cliente, novo_executante, registro_id))
+        conexao.commit()
+        
+        if cursor.rowcount > 0:
+            st.success(f"✏️ Registro ID {registro_id} atualizado com sucesso!")
+            st.rerun()
+        else:
+            st.warning(f"⚠️ Nenhum registro encontrado com o ID {registro_id}.")
+    except Exception as e:
+        st.error(f"❌ Erro ao atualizar: {e}")
+    finally:
+        if 'cursor' in locals(): cursor.close()
         if 'conexao' in locals(): conexao.close()
 
 # Gera relatórios consolidados usando queries SQL
@@ -170,28 +195,33 @@ def pag_analises(dt):
         gerar_relatorios_sql(filtro)
 
 def pag_correcoes(dt):
-    st.header("🛠️ Histórico de Lançamentos")
-    s = st.selectbox("Setor:", ["lavagem", "lavados", "secagem", "pesagem", "dobragem"])
-    if st.button("Visualizar Últimas Linhas"): 
-        puxar_historico_sql(s)
-
-# --- CORPO PRINCIPAL INTERFACE ---
-st.set_page_config(page_title="Controle Lavanderia", layout="wide")
-
-st.sidebar.title("🧼 Navegação")
-opcoes_menu = {
-    "Lavagem": pag_lavagem, 
-    "Lavados": pag_lavados, 
-    "Secagem": pag_secagem,
-    "Pesagem": pag_pesagem, 
-    "Dobragem": pag_dobragem, 
-    "📊 Resumos e Análises": pag_analises,
-    "🛠️ Histórico": pag_correcoes
-}
-menu = st.sidebar.radio("Selecione o Setor:", list(opcoes_menu.keys()))
-
-st.sidebar.markdown("---")
-dt_global = st.sidebar.date_input("Data do Lançamento:", datetime.date.today())
-
-# Executa a página sem precisar passar parâmetros de conexão por fora
-opcoes_menu[menu](dt_global)
+    st.header("🛠️ Histórico e Correções de Lançamentos")
+    s = st.selectbox("Selecione o Setor para visualizar:", ["lavagem", "lavados", "secagem", "pesagem", "dobragem"])
+    
+    try:
+        conexao = conectar_banco()
+        query = f"SELECT id, cliente, data, executante FROM {s} ORDER BY id DESC LIMIT 15"
+        df = pd.read_sql_query(query, conexao)
+    except Exception as e:
+        st.error(f"Erro ao carregar dados: {e}")
+        df = pd.DataFrame()
+    finally:
+        if 'conexao' in locals(): conexao.close()
+    
+    if df.empty:
+        st.info("Nenhum registro encontrado neste setor.")
+    else:
+        st.markdown("### Últimos 15 Lançamentos")
+        st.dataframe(df, use_container_width=True, hide_index=True)
+        
+        st.markdown("---")
+        st.markdown("### ⚙️ Painel de Alterações")
+        
+        col_id, col_inputs = st.columns(2)
+        
+        with col_id:
+            id_selecionado = st.number_input("Digite o ID do lançamento:", min_value=1, step=1, key="id_corr")
+            if st.button("🗑️ Deletar Registro", type="secondary", use_container_width=True):
+                deletar_registro_sql(s, id_selecionado)
+                
+        with col_inputs:
