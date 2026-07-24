@@ -214,14 +214,25 @@ def pag_correcoes(dt):
         st.markdown("### Últimos 15 Lançamentos")
         st.dataframe(df, use_container_width=True, hide_index=True)
         
-        st.markdown("---")
+                st.markdown("---")
         st.markdown("### ⚙️ Painel de Alterações")
         
+        # O número 2 define que as colunas terão tamanhos iguais
         col_id, col_inputs = st.columns(2)
         
         with col_id:
             id_selecionado = st.number_input("Digite o ID do lançamento:", min_value=1, step=1, key="id_corr")
             if st.button("🗑️ Deletar Registro", type="secondary", use_container_width=True):
                 deletar_registro_sql(s, id_selecionado)
+                
+        with col_inputs:
+            novo_c = st.text_input("Novo Nome do Cliente (Deixe vazio se for apenas deletar)")
+            novo_e = st.text_input("Novo Nome do Executante (Deixe vazio se for apenas deletar)")
+            if st.button("✏️ Salvar Alterações", type="primary", use_container_width=True):
+                if novo_c and novo_e:
+                    editar_registro_sql(s, id_selecionado, novo_c, novo_e)
+                else:
+                    st.warning("⚠️ Para editar, preencha o Novo Cliente e o Novo Executante.")
+
                 
         with col_inputs:
