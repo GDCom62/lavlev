@@ -214,10 +214,9 @@ def pag_correcoes(dt):
         st.markdown("### Últimos 15 Lançamentos")
         st.dataframe(df, use_container_width=True, hide_index=True)
         
-                st.markdown("---")
+        st.markdown("---")
         st.markdown("### ⚙️ Painel de Alterações")
         
-        # O número 2 define que as colunas terão tamanhos iguais
         col_id, col_inputs = st.columns(2)
         
         with col_id:
@@ -233,6 +232,3 @@ def pag_correcoes(dt):
                     editar_registro_sql(s, id_selecionado, novo_c, novo_e)
                 else:
                     st.warning("⚠️ Para editar, preencha o Novo Cliente e o Novo Executante.")
-
-                
-        with col_inputs:
