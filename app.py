@@ -195,3 +195,25 @@ dt_global = st.sidebar.date_input("Data do Lançamento:", datetime.date.today())
 
 # Executa a página sem precisar passar parâmetros de conexão por fora
 opcoes_menu[menu](dt_global)
+# --- CORPO PRINCIPAL INTERFACE ---
+st.set_page_config(page_title="Controle Lavanderia", layout="wide")
+
+st.sidebar.title("🧼 Navegação")
+opcoes_menu = {
+    "Lavagem": pag_lavagem, 
+    "Lavados": pag_lavados, 
+    "Secagem": pag_secagem,
+    "Pesagem": pag_pesagem, 
+    "Dobragem": pag_dobragem, 
+    "📊 Resumos e Análises": pag_analises,
+    "🛠️ Histórico": pag_correcoes
+}
+menu = st.sidebar.radio("Selecione o Setor:", list(opcoes_menu.keys()))
+
+st.sidebar.markdown("---")
+dt_global = st.sidebar.date_input("Data do Lançamento:", datetime.date.today())
+
+# Executa a página enviando a data global escolhida na barra lateral
+opcoes_menu[menu](dt_global)
+
+
