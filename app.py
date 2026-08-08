@@ -178,25 +178,9 @@ def pag_correcoes(dt):
 # --- CORPO PRINCIPAL INTERFACE ---
 st.set_page_config(page_title="Controle Lavanderia", layout="wide")
 
-st.sidebar.title("🧼 Navegação")
-opcoes_menu = {
-    "Lavagem": pag_lavagem, 
-    "Lavados": pag_lavados, 
-    "Secagem": pag_secagem,
-    "Pesagem": pag_pesagem, 
-    "Dobragem": pag_dobragem, 
-    "📊 Resumos e Análises": pag_analises,
-    "🛠️ Histórico": pag_correcoes
-}
-menu = st.sidebar.radio("Selecione o Setor:", list(opcoes_menu.keys()))
-
-st.sidebar.markdown("---")
-dt_global = st.sidebar.date_input("Data do Lançamento:", datetime.date.today())
-
-# Executa a página sem precisar passar parâmetros de conexão por fora
-opcoes_menu[menu](dt_global)
-# --- CORPO PRINCIPAL INTERFACE ---
-st.set_page_config(page_title="Controle Lavanderia", layout="wide")
+# Limpa o estado de recarregamento se ele existir
+if st.session_state.get("precisa_recarregar", False):
+    st.session_state["precisa_recarregar"] = False
 
 st.sidebar.title("🧼 Navegação")
 opcoes_menu = {
@@ -208,12 +192,55 @@ opcoes_menu = {
     "📊 Resumos e Análises": pag_analises,
     "🛠️ Histórico": pag_correcoes
 }
-menu = st.sidebar.radio("Selecione o Setor:", list(opcoes_menu.keys()))
+
+# Adicionado o parâmetro key="menu_navegacao_principal" para fixar o ID único do componente
+menu = st.sidebar.radio("Selecione o Setor:", list(opcoes_menu.keys()), key="menu_navegacao_principal")
 
 st.sidebar.markdown("---")
 dt_global = st.sidebar.date_input("Data do Lançamento:", datetime.date.today())
 
 # Executa a página enviando a data global escolhida na barra lateral
 opcoes_menu[menu](dt_global)
+
+# --- SALVAR MODIFICAÇÕES (EDIÇÃO E EXCLUSÃO) ---
+def salvar_alteracoes_banco(tabela, df_original, e_editado):
+    conexao = conectar_banco()
+    cursor = conexao.cursor()
+    sucesso = False
+    
+    try:
+        # 1. Processar Linhas Deletadas
+        if "deleted_rows" in e_editado and e_editado["deleted_rows"]:
+            for indice in e_editado["deleted_rows"]:
+                id_registro = int(df_original.iloc[indice]["id"])
+                cursor.execute(f"DELETE FROM {tabela} WHERE id = %s", (id_registro,))
+            sucesso = True
+
+        # 2. Processar Linhas Editadas
+        if "edited_rows" in e_editado and e_editado["edited_rows"]:
+            for indice_str, mudancas in e_editado["edited_rows"].items():
+                indice = int(indice_str)
+                id_registro = int(df_original.iloc[indice]["id"])
+                
+                for coluna, novo_valor in mudancas.items():
+                    if coluna == "id": continue 
+                    
+                    query = f"UPDATE {tabela} SET {coluna} = %s WHERE id = %s"
+                    cursor.execute(query, (novo_valor, id_registro))
+            sucesso = True
+            
+        if sucesso:
+            conexao.commit()
+            st.success("✅ Banco de dados atualizado com sucesso!")
+            # Criamos uma flag temporária para recarregar sem quebrar o ID do rádio
+            st.session_state["precisa_recarregar"] = True
+            st.rerun()
+            
+    except Exception as e:
+        conexao.rollback()
+        st.error(f"❌ Erro ao salvar alterações: {e}")
+    finally:
+        cursor.close()
+        conexao.close()
 
 
