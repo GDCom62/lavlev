@@ -210,7 +210,7 @@ def pag_dobragem(dt):
                 registrar_dados_sql("dobragem", colunas, valores)
             else: st.warning("Preencha Cliente e Executante.")
 
-def pag_analises(dt):
+def pag_analises(dt): 
     st.header("📊 Painel Estatístico e Resumos")
     filtro = st.text_input("🔍 Filtrar por Cliente (Vazio para todos)")
     if st.button("Gerar / Atualizar Relatórios"): 
