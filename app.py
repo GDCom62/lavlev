@@ -211,7 +211,7 @@ def pag_pesagem(dt):
                 registrar_dados_sql("pesagem", colunas, [c, dt, p, e, tipo])
             else: st.warning("Preencha os campos obrigatórios.")
 
-def pag_dobragem(dt): 
+def pag_dobragem(dt):
     st.header("Lançamento - Setor de Dobragem")
     with st.form("f_dob", clear_on_submit=True):
         c = st.text_input("Cliente")
