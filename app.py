@@ -19,7 +19,8 @@ def conectar_banco():
 
 def registrar_dados_sql(tabela, colunas, dados):
     conexao = conectar_banco()
-    if conexao is None: return
+    if conexao is None: 
+        return
     try:
         cursor = conexao.cursor()
         placeholders = ", ".join(["%s"] * len(dados))
@@ -31,11 +32,13 @@ def registrar_dados_sql(tabela, colunas, dados):
     except Exception as e:
         st.error(f"❌ Erro ao salvar: {e}")
     finally:
-        if conexao: conexao.close()
+        if conexao: 
+            conexao.close()
 
 def puxar_historico_filtrado_sql(tabela, filtro_cliente, filtro_colaborador):
     conexao = conectar_banco()
-    if conexao is None: return pd.DataFrame()
+    if conexao is None: 
+        return pd.DataFrame()
     try:
         query = f"SELECT * FROM {tabela} WHERE 1=1"
         params = []
@@ -51,11 +54,13 @@ def puxar_historico_filtrado_sql(tabela, filtro_cliente, filtro_colaborador):
         st.error(f"❌ Erro ao buscar dados na tabela {tabela}: {e}")
         return pd.DataFrame()
     finally:
-        if conexao: conexao.close()
+        if conexao: 
+            conexao.close()
 
 def salvar_alteracoes_banco(tabela, df_original, e_editado):
     conexao = conectar_banco()
-    if conexao is None: return
+    if conexao is None: 
+        return
     try:
         cursor = conexao.cursor()
         sucesso = False
@@ -68,7 +73,8 @@ def salvar_alteracoes_banco(tabela, df_original, e_editado):
             for idx_str, mudancas in e_editado["edited_rows"].items():
                 id_reg = int(df_original.iloc[int(idx_str)]["id"])
                 for col, valor in mudancas.items():
-                    if col == "id": continue
+                    if col == "id": 
+                        continue
                     cursor.execute(f"UPDATE {tabela} SET {col} = %s WHERE id = %s", (valor, id_reg))
             sucesso = True
         if sucesso:
@@ -79,21 +85,25 @@ def salvar_alteracoes_banco(tabela, df_original, e_editado):
         conexao.rollback()
         st.error(f"❌ Erro ao atualizar registros: {e}")
     finally:
-        if conexao: conexao.close()
+        if conexao: 
+            conexao.close()
 
 def gerar_relatorios_sql(filtro_cliente):
     conexao = conectar_banco()
-    if conexao is None: return
+    if conexao is None: 
+        return
     try:
         setores = ["lavagem", "lavados", "secagem", "pesagem", "dobragem"]
         df_geral = []
         for s in setores:
-            query = f"SELECT executante, '{s}' as sector FROM {s}"
             if filtro_cliente:
-                df = pd.read_sql_query(query + " WHERE cliente ILIKE %s", conexao, params=(f"%{filtro_cliente}%",))
+                query = f"SELECT executante, '{s}' as sector FROM {s} WHERE cliente ILIKE %s"
+                df = pd.read_sql_query(query, conexao, params=(f"%{filtro_cliente}%",))
             else:
+                query = f"SELECT executante, '{s}' as sector FROM {s}"
                 df = pd.read_sql_query(query, conexao)
-            if not df.empty: df_geral.append(df)
+            if not df.empty: 
+                df_geral.append(df)
         st.subheader("1. Quantidade de Operações por Funcionário / Setor")
         if df_geral:
             res = pd.concat(df_geral, ignore_index=True).groupby(["executante", "sector"]).size().unstack(fill_value=0)
@@ -118,7 +128,8 @@ def gerar_relatorios_sql(filtro_cliente):
     except Exception as e:
         st.error(f"Erro nos relatórios: {e}")
     finally:
-        if conexao: conexao.close()
+        if conexao: 
+            conexao.close()
 
 def pag_lavagem(dt):
     st.header("Lançamento - Setor de Lavagem")
@@ -130,8 +141,10 @@ def pag_lavagem(dt):
         t = st.text_input("Horário Término")
         e = st.text_input("Executante")
         if st.form_submit_button("Gravar Lavagem"):
-            if c and e: registrar_dados_sql("lavagem", ["cliente", "data", "maquina", "peso", "horario_inicio", "horario_termino", "executante"], [c, dt, m, p, i, t, e])
-            else: st.warning("Preencha Cliente e Executante.")
+            if c and e: 
+                registrar_dados_sql("lavagem", ["cliente", "data", "maquina", "peso", "horario_inicio", "horario_termino", "executante"], [c, dt, m, p, i, t, e])
+            else: 
+                st.warning("Preencha Cliente e Executante.")
 
 def pag_lavados(dt):
     st.header("Lançamento - Setor de Lavados")
@@ -143,8 +156,10 @@ def pag_lavados(dt):
         t = st.text_input("Horário Término")
         e = st.text_input("Executante")
         if st.form_submit_button("Gravar Lavados"):
-            if c and e: registrar_dados_sql("lavados", ["cliente", "data", "maquina", "peso", "horario_inicio", "horario_termino", "executante"], [c, dt, m, p, i, t, e])
-            else: st.warning("Preencha os campos obrigatórios.")
+            if c and e: 
+                registrar_dados_sql("lavados", ["cliente", "data", "maquina", "peso", "horario_inicio", "horario_termino", "executante"], [c, dt, m, p, i, t, e])
+            else: 
+                st.warning("Preencha os campos obrigatórios.")
 
 def pag_secagem(dt):
     st.header("Lançamento - Setor de Secagem")
@@ -155,8 +170,10 @@ def pag_secagem(dt):
         sai = st.text_input("Horário Saída")
         e = st.text_input("Executante")
         if st.form_submit_button("Gravar Secagem"):
-            if c and e: registrar_dados_sql("secagem", ["maquina", "cliente", "data", "horario_entrada", "horario_saida", "executante"], [m, c, dt, ent, sai, e])
-            else: st.warning("Preencha os campos obrigatórios.")
+            if c and e: 
+                registrar_dados_sql("secagem", ["maquina", "cliente", "data", "horario_entrada", "horario_saida", "executante"], [m, c, dt, ent, sai, e])
+            else: 
+                st.warning("Preencha os campos obrigatórios.")
 
 def pag_pesagem(dt):
     st.header("Lançamento - Setor de Pesagem")
@@ -166,8 +183,10 @@ def pag_pesagem(dt):
         e = st.text_input("Executante")
         tipo = st.radio("Tipo de Operação", ["Normal", "Relave"])
         if st.form_submit_button("Gravar Pesagem"):
-            if c and e: registrar_dados_sql("pesagem", ["cliente", "data", "pesagem", "executante", "tipo_operacao"], [c, dt, p, e, tipo])
-            else: st.warning("Preencha os campos obrigatórios.")
+            if c and e: 
+                registrar_dados_sql("pesagem", ["cliente", "data", "pesagem", "executante", "tipo_operacao"], [c, dt, p, e, tipo])
+            else: 
+                st.warning("Preencha os campos obrigatórios.")
 
 def pag_dobragem(dt):
     st.header("Lançamento - Setor de Dobragem")
@@ -180,7 +199,8 @@ def pag_dobragem(dt):
             if c and e:
                 cols_it = [it.lower().replace("ç", "c").replace("ã", "a") for it in ITENS_DOBRAGEM]
                 registrar_dados_sql("dobragem", ["cliente", "data", "executante"] + cols_it, [c, dt, e] + [int(qtds[it]) for it in ITENS_DOBRAGEM])
-            else: st.warning("Preencha Cliente e Executante.")
+            else: 
+                st.warning("Preencha Cliente e Executante.")
 
 def pag_analises(dt):
     st.header("📊 Painel Estatístico e Resumos")
@@ -189,7 +209,7 @@ def pag_analises(dt):
 
 def pag_correcoes(dt):
     st.header("🛠️ Gerenciamento e Correção de Lançamentos")
-    st.markdown("Altere os dados nas células ou apagar linhas usando a tecla Delete.")
+    st.markdown("Altere os dados nas células ou apague linhas usando a tecla Delete.")
     s = st.selectbox("Selecione o Setor para visualização:", ["lavagem", "lavados", "secagem", "pesagem", "dobragem"])
     f_cliente = st.text_input("🔍 Filtrar por Cliente (Opcional):")
     f_colab = st.text_input("👤 Filtrar por Colaborador / Executante (Opcional):")
@@ -204,7 +224,3 @@ def pag_correcoes(dt):
         houve_mudanca = len(mudancas.get("edited_rows", {})) > 0 or len(mudancas.get("deleted_rows", [])) > 0
         
         if houve_mudanca:
-            st.warning("⚠️ Existem alterações não salvas nesta tabela!")
-            if st.button("💾 CONFIRMAR E SALVAR ALTERAÇÕES NO BANCO"):
-                salvar_alteracoes_banco(s, df_dados, mudancas)
-    else:
