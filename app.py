@@ -182,22 +182,29 @@ def tela_analises(dt):
         except Exception as err: st.error(f"Erro nos relatórios: {err}")
         finally: db.close()
 
-def tela_historico(dt): 
+# --- FUNÇÃO SEPARADA PARA CARREGAR OS DADOS DO POSTGRESQL ---
+def buscar_dados_historico(tabela, cliente, colaborador):
+    db = abrir_conexao_banco()
+    if not db:
+        return pd.DataFrame()
+    try:
+        query_hist = f"SELECT * FROM {tabela} WHERE 1=1"
+        params_hist = []
+        if cliente:
+            query_hist += " AND cliente ILIKE %s"
+            params_hist.append(f"%{cliente}%")
+        if colaborador:
+            query_hist += " AND executante ILIKE %s"
+            params_hist.append(f"%{colaborador}%")
+        query_hist += " ORDER BY id DESC LIMIT 50"
+        return pd.read_sql_query(query_hist, db, params=params_hist if (cliente or colaborador) else None)
+    except Exception as err:
+        st.error(f"Erro ao carregar do banco: {err}")
+        return pd.DataFrame()
+    finally:
+        db.close()
+
+# --- TELA DE HISTÓRICO TOTALMENTE BLINDADA CONTRA ERROS DE ESCOPO ---
+def tela_historico(dt):
     st.header("🛠️ Gerenciamento e Correção de Lançamentos")
     st.markdown("✏️ **Para Editar:** Clique duas vezes em qualquer campo, mude o valor e aperte Enter.")
-    st.markdown("❌ **Para Excluir:** Marque a caixinha **'Selecionar para Excluir'** na linha desejada.")
-    s = st.selectbox("Selecione o Setor para visualização:", ["lavagem", "lavados", "secagem", "pesagem", "dobragem"])
-    f_cliente = st.text_input("🔍 Filtrar por Cliente (Opcional):", key="hist_fc")
-    f_colab = st.text_input("👤 Filtrar por Colaborador / Executante (Opcional):", key="hist_fe")
-    db = abrir_conexao_banco()
-    if db:
-        try:
-            query_hist = f"SELECT * FROM {s} WHERE 1=1"
-            params_hist = []
-            if f_cliente:
-                query_hist += " AND cliente ILIKE %s"
-                params_hist.append(f"%{f_cliente}%")
-            if f_colab:
-                query_hist += " AND executante ILIKE %s"
-                params_hist.append(f"%{f_colab}%")
-            query_hist += " ORDER BY id DESC LIMIT 50"
