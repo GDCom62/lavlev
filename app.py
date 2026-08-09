@@ -7,7 +7,7 @@ st.set_page_config(page_title="Controle Lavanderia", layout="wide")
 
 ITENS_DOBRAGEM = ["Lençol", "Fronha", "Capote", "Camisola", "Oleado", "Calça", "Camisa", "Cobertor", "Colcha", "Toalha", "Traçado"]
 
-# --- TENTATIVA DE CONEXÃO GLOBAL ---
+# --- CONEXÃO GLOBAL COM O BANCO ---
 db = None
 if "banco_dados" in st.secrets and "uri" in st.secrets["banco_dados"]:
     try:
@@ -17,7 +17,7 @@ if "banco_dados" in st.secrets and "uri" in st.secrets["banco_dados"]:
 else:
     st.error("Configuração 'uri' ausente nos Secrets!")
 
-# --- MENU LATERAL ---
+# --- MENU LATERAL DE NAVEGAÇÃO ---
 st.sidebar.title("🧼 Navegação")
 opcoes = ["Lavagem", "Lavados", "Secagem", "Pesagem", "Dobragem", "📊 Resumos e Análises", "🛠️ Histórico"]
 menu = st.sidebar.radio("Selecione a Tela:", opcoes, key="nav_p")
@@ -160,8 +160,8 @@ if menu == "📊 Resumos e Análises" and db:
 # --- TELA 7: GERENCIAMENTO E HISTÓRICO ---
 if menu == "🛠️ Histórico" and db:
     st.header("🛠️ Gerenciamento e Correção de Lançamentos")
-    st.markdown("✏️ **Para Editar:** Clique duas vezes em qualquer campo, mude o valor e aperte Enter.")
-    st.markdown("❌ **Para Excluir:** Marque a caixinha **'Selecionar para Excluir'** na linha desejada.")
+    st.markdown("✏ *Para Editar:* Clique duas vezes em qualquer campo, mude o valor e aperte Enter.")
+    st.markdown("❌ *Para Excluir:* Marque a caixinha **'Selecionar para Excluir'** na linha desejada.")
     s = st.selectbox("Selecione o Setor para visualização:", ["lavagem", "lavados", "secagem", "pesagem", "dobragem"])
     f_cliente = st.text_input("🔍 Filtrar por Cliente (Opcional):", key="hist_fc")
     f_colab = st.text_input("👤 Filtrar por Colaborador / Executante (Opcional):", key="hist_fe")
@@ -188,12 +188,10 @@ if menu == "🛠️ Histórico" and db:
                 if st.button("💾 CONFIRMAR E SALVAR ALTERAÇÕES NO BANCO"):
                     cursor = db.cursor()
                     for idx_str, campos in mudancas["edited_rows"].items():
+                        id_reg = int(df_dados.iloc[int(idx_str)]["id"])
                         if campos.get("Selecionar para Excluir") is True:
-                            id_reg = int(df_dados.iloc[int(idx_str)]["id"])
                             cursor.execute(f"DELETE FROM {s} WHERE id = %s", (id_reg,))
-                    for idx_str, campos in mudancas["edited_rows"].items():
-                        if campos.get("Selecionar para Excluir") is not True:
-                            id_reg = int(df_dados.iloc[int(idx_str)]["id"])
+                        else:
                             for col, valor in campos.items():
                                 if col != "id" and col != "Selecionar para Excluir":
                                     cursor.execute(f"UPDATE {s} SET {col} = %s WHERE id = %s", (valor, id_reg))
@@ -201,3 +199,10 @@ if menu == "🛠️ Histórico" and db:
                     st.success("✅ Modificações gravadas!")
                     st.rerun()
         else:
+            st.info(f"Nenhum registro encontrado na tabela '{s}' com os filtros informados.")
+    except Exception as err:
+        st.error(f"Erro ao carregar histórico: {err}")
+
+# Fechamento seguro da conexão
+if db:
+    db.close()
