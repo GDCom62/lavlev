@@ -217,7 +217,7 @@ def pag_dobragem(dt):
             else:
                 st.warning("Preencha Cliente e Executante.")
 
-def pag_analises(dt):
+def pag_analises(dt): 
     st.header("📊 Painel Estatístico e Resumos")
     filtro = st.text_input("🔍 Filtrar por Cliente (Vazio para todos)")
     gerar_relatorios_sql(filtro)
