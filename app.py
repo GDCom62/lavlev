@@ -59,12 +59,12 @@ def salvar_alteracoes_banco(tabela, df_original, e_editado):
     try:
         cursor = conexao.cursor()
         sucesso = False
-        if "deleted_rows" in e_editado and e_editado["deleted_rows"]:
+        if e_editado and "deleted_rows" in e_editado and e_editado["deleted_rows"]:
             for indice in e_editado["deleted_rows"]:
                 id_reg = int(df_original.iloc[indice]["id"])
                 cursor.execute(f"DELETE FROM {tabela} WHERE id = %s", (id_reg,))
             sucesso = True
-        if "edited_rows" in e_editado and e_editado["edited_rows"]:
+        if e_editado and "edited_rows" in e_editado and e_editado["edited_rows"]:
             for idx_str, mudancas in e_editado["edited_rows"].items():
                 id_reg = int(df_original.iloc[int(idx_str)]["id"])
                 for col, valor in mudancas.items():
@@ -202,13 +202,14 @@ def pag_correcoes(dt):
     if df_dados is not None and not df_dados.empty:
         st.markdown("### 📋 Dados Encontrados no Banco:")
         dados_editados = st.data_editor(df_dados, use_container_width=True, num_rows="dynamic", disabled=["id"], key=f"ed_{s}")
-        mudancas = st.session_state.get(f"ed_{s}", {})
-        if len(mudancas.get("edited_rows", {})) > 0 or len(mudancas.get("deleted_rows", [])) > 0:
-            st.warning("⚠️ Existem alterações não salvas nesta tabela!")
-            if st.button("💾 CONFIRMAR E SALVAR ALTERAÇÕES NO BANCO"):
-                salvar_alteracoes_banco(s, df_dados, mudancas)
+        
+        mudancas = st.session_state.get(f"ed_{s}")
+        
+        if mudancas:
+            editadas = mudancas.get("edited_rows", {})
+            deletadas = mudancas.get("deleted_rows", [])
+            if len(editadas) > 0 or len(deletadas) > 0:
+                st.warning("⚠️ Existem alterações não salvas nesta tabela!")
+                if st.button("💾 CONFIRMAR E SALVAR ALTERAÇÕES NO BANCO"):
+                    salvar_alteracoes_banco(s, df_dados, mudancas)
     else:
-        st.info(f"Nenhum registro encontrado na tabela '{s}' com os filtros informados.")
-
-st.sidebar.title("🧼 Navegação")
-opcoes_menu = {
