@@ -5,7 +5,10 @@ import psycopg2
 
 st.set_page_config(page_title="Controle Lavanderia", layout="wide")
 
-ITENS_DOBRAGEM = ["Lençol", "Fronha", "Capote", "Camisola", "Oleado", "Calça", "Camisa", "Cobertor", "Colcha", "Toalha", "Traçado"]
+ITENS_DOBRAGEM = [
+    "Lençol", "Fronha", "Capote", "Camisola", "Oleado", 
+    "Calça", "Camisa", "Cobertor", "Colcha", "Toalha", "Traçado"
+]
 
 def conectar_banco():
     try:
@@ -19,7 +22,7 @@ def conectar_banco():
 
 def registrar_dados_sql(tabela, colunas, dados):
     conexao = conectar_banco()
-    if conexao is None: 
+    if conexao is None:
         return
     try:
         cursor = conexao.cursor()
@@ -32,12 +35,12 @@ def registrar_dados_sql(tabela, colunas, dados):
     except Exception as e:
         st.error(f"❌ Erro ao salvar: {e}")
     finally:
-        if conexao: 
+        if conexao:
             conexao.close()
 
 def puxar_historico_filtrado_sql(tabela, filtro_cliente, filtro_colaborador):
     conexao = conectar_banco()
-    if conexao is None: 
+    if conexao is None:
         return pd.DataFrame()
     try:
         query = f"SELECT * FROM {tabela} WHERE 1=1"
@@ -54,12 +57,12 @@ def puxar_historico_filtrado_sql(tabela, filtro_cliente, filtro_colaborador):
         st.error(f"❌ Erro ao buscar dados na tabela {tabela}: {e}")
         return pd.DataFrame()
     finally:
-        if conexao: 
+        if conexao:
             conexao.close()
 
 def salvar_alteracoes_banco(tabela, df_original, e_editado):
     conexao = conectar_banco()
-    if conexao is None: 
+    if conexao is None:
         return
     try:
         cursor = conexao.cursor()
@@ -73,7 +76,7 @@ def salvar_alteracoes_banco(tabela, df_original, e_editado):
             for idx_str, mudancas in e_editado["edited_rows"].items():
                 id_reg = int(df_original.iloc[int(idx_str)]["id"])
                 for col, valor in mudancas.items():
-                    if col == "id": 
+                    if col == "id":
                         continue
                     cursor.execute(f"UPDATE {tabela} SET {col} = %s WHERE id = %s", (valor, id_reg))
             sucesso = True
@@ -85,12 +88,12 @@ def salvar_alteracoes_banco(tabela, df_original, e_editado):
         conexao.rollback()
         st.error(f"❌ Erro ao atualizar registros: {e}")
     finally:
-        if conexao: 
+        if conexao:
             conexao.close()
 
 def gerar_relatorios_sql(filtro_cliente):
     conexao = conectar_banco()
-    if conexao is None: 
+    if conexao is None:
         return
     try:
         setores = ["lavagem", "lavados", "secagem", "pesagem", "dobragem"]
@@ -102,7 +105,7 @@ def gerar_relatorios_sql(filtro_cliente):
                 query += " WHERE cliente ILIKE %s"
                 params.append(f"%{filtro_cliente}%")
             df = pd.read_sql_query(query, conexao, params=params if filtro_cliente else None)
-            if not df.empty: 
+            if not df.empty:
                 df_geral.append(df)
         st.subheader("1. Quantidade de Operações por Funcionário / Setor")
         if df_geral:
@@ -130,7 +133,7 @@ def gerar_relatorios_sql(filtro_cliente):
     except Exception as e:
         st.error(f"Erro nos relatórios: {e}")
     finally:
-        if conexao: 
+        if conexao:
             conexao.close()
 
 def pag_lavagem(dt):
