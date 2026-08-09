@@ -93,9 +93,9 @@ def salvar_alteracoes_banco(tabela, df_original, e_editado):
                     cursor.execute(query, (novo_valor, id_registro))
             sucesso = True
             
-        if success:
+        if sucesso:
             conexao.commit()
-            st.success("✅ Banco de dados atualizado com sucesso!")
+            st.success("✅ Banco de dados updated com sucesso!")
             st.rerun()
     except Exception as e:
         conexao.rollback()
@@ -229,4 +229,6 @@ def pag_dobragem(dt):
 def pag_analises(dt):
     st.header("📊 Painel Estatístico e Resumos")
     filtro = st.text_input("🔍 Filtrar por Cliente (Vazio para todos)")
-    if st.button("Gerar / Atualizar Relatórios"): 
+    gerar_relatorios_sql(filtro)
+
+def pag_correcoes(dt):
