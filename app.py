@@ -19,29 +19,31 @@ def abrir_conexao_banco():
         return None
 
 # --- FUNÇÃO ISOLADA PARA SALVAR ALTERAÇÕES DO HISTÓRICO ---
-def executar_salvamento_historico(tabela, df_original, mudancas):
+def executar_salvamento_historico(tabela, df_com_checkboxes, mudancas_editor):
     db = abrir_conexao_banco()
     if not db:
         return
     try:
         cursor = db.cursor()
-        deletadas = mudancas.get("deleted_rows", [])
-        editadas = mudancas.get("edited_rows", {})
         
-        if deletadas:
-            for indice in deletadas:
-                id_reg = int(df_original.iloc[indice]["id"])
-                cursor.execute(f"DELETE FROM {tabela} WHERE id = %s", (id_reg,))
-                
-        if editadas:
-            for idx_str, campos in editadas.items():
-                id_reg = int(df_original.iloc[int(idx_str)]["id"])
-                for col, valor in campos.items():
-                    if col != "id":
-                        cursor.execute(f"UPDATE {tabela} SET {col} = %s WHERE id = %s", (valor, id_reg))
+        # 1. Processar Exclusões (Pelas caixas de seleção marcadas como True)
+        if "edited_rows" in mudancas_editor:
+            for idx_str, campos in mudancas_editor["edited_rows"].items():
+                if campos.get("Selecionar para Excluir") is True:
+                    id_reg = int(df_com_checkboxes.iloc[int(idx_str)]["id"])
+                    cursor.execute(f"DELETE FROM {tabela} WHERE id = %s", (id_reg,))
+        
+        # 2. Processar Edições (Apenas nas linhas que não foram excluídas)
+        if "edited_rows" in mudancas_editor:
+            for idx_str, campos in mudancas_editor["edited_rows"].items():
+                if campos.get("Selecionar para Excluir") is not True:
+                    id_reg = int(df_com_checkboxes.iloc[int(idx_str)]["id"])
+                    for col, valor in campos.items():
+                        if col != "id" and col != "Selecionar para Excluir":
+                            cursor.execute(f"UPDATE {tabela} SET {col} = %s WHERE id = %s", (valor, id_reg))
                         
         db.commit()
-        st.success("✅ Modificações gravadas com sucesso!")
+        st.success("✅ Banco de dados atualizado com sucesso!")
         st.rerun()
     except Exception as err:
         db.rollback()
@@ -141,7 +143,7 @@ if menu == "Pesagem":
             finally:
                 db_conexao.close()
 
-# --- FLUXO 5: TELA DE DOBRagem ---
+# --- FLUXO 5: TELA DE DOBRAGEM ---
 if menu == "Dobragem":
     st.header("Lançamento - Setor de Dobragem")
     c = st.text_input("Cliente", key="dob_c")
@@ -208,12 +210,3 @@ if menu == "📊 Resumos e Análises":
                 st.dataframe(res_pecas, use_container_width=True)
             else:
                 st.info("Nenhum registro de dobras encontrado.")
-        except Exception as err:
-            st.error(f"Erro nos relatórios: {err}")
-        finally:
-            db_conexao.close()
-
-# --- FLUXO 7: GERENCIAMENTO E HISTÓRICO ---
-if menu == "🛠️ Histórico":
-    st.header("🛠️ Gerenciamento e Correção de Lançamentos")
-    st.markdown("Altere os dados nas células ou apague linhas selecionando-as e apertando a tecla Delete.")
