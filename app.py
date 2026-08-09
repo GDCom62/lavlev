@@ -14,7 +14,7 @@ def conectar_banco():
         st.error("⚠️ Configuração 'uri' ausente nos Secrets!")
         return None
     except Exception as e:
-        st.error(f"⚠️ Erro de conexão: {e}")
+        st.error(f"⚠️ Erro de conexão com o banco de dados: {e}")
         return None
 
 def registrar_dados_sql(tabela, colunas, dados):
@@ -48,7 +48,7 @@ def puxar_historico_filtrado_sql(tabela, filtro_cliente, filtro_colaborador):
         query += " ORDER BY id DESC LIMIT 50"
         return pd.read_sql_query(query, conexao, params=params)
     except Exception as e:
-        st.error(f"❌ Erro ao buscar: {e}")
+        st.error(f"❌ Erro ao buscar dados na tabela {tabela}: {e}")
         return pd.DataFrame()
     finally:
         if conexao: conexao.close()
@@ -73,11 +73,11 @@ def salvar_alteracoes_banco(tabela, df_original, e_editado):
             sucesso = True
         if sucesso:
             conexao.commit()
-            st.success("✅ Alterações salvas!")
+            st.success("✅ Alterações salvas com sucesso no banco de dados!")
             st.rerun()
     except Exception as e:
         conexao.rollback()
-        st.error(f"❌ Erro ao atualizar: {e}")
+        st.error(f"❌ Erro ao atualizar registros: {e}")
     finally:
         if conexao: conexao.close()
 
@@ -100,7 +100,7 @@ def gerar_relatorios_sql(filtro_cliente):
             res["Total Geral"] = res.sum(axis=1)
             st.dataframe(res, use_container_width=True)
         else:
-            st.info("Nenhum dado encontrado.")
+            st.info("Nenhum dado encontrado para gerar relatórios operacionais.")
         st.subheader("2. Total de Peças Dobradas por Cliente e Executante")
         cols_sql = ", ".join([it.lower().replace("ç", "c").replace("ã", "a") for it in ITENS_DOBRAGEM])
         if filtro_cliente:
@@ -114,7 +114,7 @@ def gerar_relatorios_sql(filtro_cliente):
             res_pecas["Total de Peças"] = res_pecas.sum(axis=1)
             st.dataframe(res_pecas, use_container_width=True)
         else:
-            st.info("Nenhum registro em Dobragem.")
+            st.info("Nenhum registro de dobras encontrado.")
     except Exception as e:
         st.error(f"Erro nos relatórios: {e}")
     finally:
@@ -189,30 +189,22 @@ def pag_analises(dt):
 
 def pag_correcoes(dt):
     st.header("🛠️ Gerenciamento e Correção de Lançamentos")
-    st.markdown("Altere os dados nas células ou apague linhas usando a tecla Delete.")
-    s = st.selectbox("Selecione o Setor:", ["lavagem", "lavados", "secagem", "pesagem", "dobragem"])
-    f_cliente = st.text_input("🔍 Filtrar por Cliente:")
-    f_colab = st.text_input("👤 Filtrar por Colaborador (Executante):")
+    st.markdown("Altere os dados nas células ou apagar linhas usando a tecla Delete.")
+    s = st.selectbox("Selecione o Setor para visualização:", ["lavagem", "lavados", "secagem", "pesagem", "dobragem"])
+    f_cliente = st.text_input("🔍 Filtrar por Cliente (Opcional):")
+    f_colab = st.text_input("👤 Filtrar por Colaborador / Executante (Opcional):")
+    
     df_dados = puxar_historico_filtrado_sql(s, f_cliente, f_colab)
-    if not df_dados.empty:
+    
+    if df_dados is not None and not df_dados.empty:
+        st.markdown("### 📋 Dados Encontrados no Banco:")
         dados_editados = st.data_editor(df_dados, use_container_width=True, num_rows="dynamic", disabled=["id"], key=f"ed_{s}")
+        
         mudancas = st.session_state.get(f"ed_{s}", {})
         houve_mudanca = len(mudancas.get("edited_rows", {})) > 0 or len(mudancas.get("deleted_rows", [])) > 0
+        
         if houve_mudanca:
-            st.warning("⚠️ Alterações pendentes!")
+            st.warning("⚠️ Existem alterações não salvas nesta tabela!")
             if st.button("💾 CONFIRMAR E SALVAR ALTERAÇÕES NO BANCO"):
                 salvar_alteracoes_banco(s, df_dados, mudancas)
     else:
-        st.info("Nenhum registro encontrado ou banco indisponível.")
-
-st.sidebar.title("🧼 Navegação")
-opcoes_menu = {
-    "Lavagem": pag_lavagem, 
-    "Lavados": pag_lavados, 
-    "Secagem": pag_secagem,
-    "Pesagem": pag_pesagem, 
-    "Dobragem": pag_dobragem, 
-    "📊 Resumos e Análises": pag_analises,
-    "🛠️ Histórico": pag_correcoes
-}
-menu = st.sidebar.radio("Selecione o Setor:", list(opcoes_menu.keys()), key="nav_p")
