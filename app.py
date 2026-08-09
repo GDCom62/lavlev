@@ -88,12 +88,12 @@ def gerar_relatorios_sql(filtro_cliente):
         setores = ["lavagem", "lavados", "secagem", "pesagem", "dobragem"]
         df_geral = []
         for s in setores:
+            query = f"SELECT executante, '{s}' as sector FROM {s}"
+            params = []
             if filtro_cliente:
-                query = f"SELECT executante, '{s}' as sector FROM {s} WHERE cliente ILIKE %s"
-                df = pd.read_sql_query(query, conexao, params=(f"%{filtro_cliente}%",))
-            else:
-                query = f"SELECT executante, '{s}' as sector FROM {s}"
-                df = pd.read_sql_query(query, conexao)
+                query += " WHERE cliente ILIKE %s"
+                params.append(f"%{filtro_cliente}%")
+            df = pd.read_sql_query(query, conexao, params=params if filtro_cliente else None)
             if not df.empty: df_geral.append(df)
         st.subheader("1. Quantidade de Operações por Funcionário / Setor")
         if df_geral:
@@ -104,10 +104,12 @@ def gerar_relatorios_sql(filtro_cliente):
             st.info("Nenhum dado encontrado para gerar relatórios operacionais.")
         st.subheader("2. Total de Peças Dobradas por Cliente e Executante")
         cols_sql = ", ".join([it.lower().replace("ç", "c").replace("ã", "a") for it in ITENS_DOBRAGEM])
+        query_dob = f"SELECT cliente, executante, {cols_sql} FROM dobragem"
+        params_dob = []
         if filtro_cliente:
-            df_dob = pd.read_sql_query(f"SELECT cliente, executante, {cols_sql} FROM dobragem WHERE cliente ILIKE %s", conexao, params=(f"%{filtro_cliente}%",))
-        else:
-            df_dob = pd.read_sql_query(f"SELECT cliente, executante, {cols_sql} FROM dobragem", conexao)
+            query_dob += " WHERE cliente ILIKE %s"
+            params_dob.append(f"%{filtro_cliente}%")
+        df_dob = pd.read_sql_query(query_dob, conexao, params=params_dob if filtro_cliente else None)
         if not df_dob.empty:
             mapeamento = {it.lower().replace("ç", "c").replace("ã", "a"): it for it in ITENS_DOBRAGEM}
             df_dob = df_dob.rename(columns=mapeamento)
@@ -201,10 +203,12 @@ def pag_correcoes(dt):
         st.markdown("### 📋 Dados Encontrados no Banco:")
         dados_editados = st.data_editor(df_dados, use_container_width=True, num_rows="dynamic", disabled=["id"], key=f"ed_{s}")
         mudancas = st.session_state.get(f"ed_{s}", {})
-        
-        # Validação direta e linear em uma única linha para evitar erros de indentação complexos
         if len(mudancas.get("edited_rows", {})) > 0 or len(mudancas.get("deleted_rows", [])) > 0:
             st.warning("⚠️ Existem alterações não salvas nesta tabela!")
             if st.button("💾 CONFIRMAR E SALVAR ALTERAÇÕES NO BANCO"):
                 salvar_alteracoes_banco(s, df_dados, mudancas)
     else:
+        st.info(f"Nenhum registro encontrado na tabela '{s}' com os filtros informados.")
+
+st.sidebar.title("🧼 Navegação")
+opcoes_menu = {
