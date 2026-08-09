@@ -37,7 +37,7 @@ def registrar_dados_sql(tabela, colunas, dados):
         if 'cursor' in locals(): cursor.close()
         if 'conexao' in locals(): conexao.close()
 
-# Busca Histórico com Filtros Dinâmicos (Cliente e Colaborador)
+# --- BUSCA HISTÓRICO COM FILTROS AVANÇADOS ---
 def puxar_historico_filtrado_sql(tabela, filtro_cliente, filtro_colaborador):
     try:
         conexao = conectar_banco()
@@ -61,7 +61,7 @@ def puxar_historico_filtrado_sql(tabela, filtro_cliente, filtro_colaborador):
     finally:
         if 'conexao' in locals(): conexao.close()
 
-# Salvar Modificações de Edição e Exclusão no Banco
+# --- SALVAR MODIFICAÇÕES (EDIÇÃO E EXCLUSÃO) ---
 def salvar_alteracoes_banco(tabela, df_original, e_editado):
     conexao = conectar_banco()
     cursor = conexao.cursor()
@@ -216,9 +216,10 @@ def pag_analises(dt):
     if st.button("Gerar / Atualizar Relatórios"): 
         gerar_relatorios_sql(filtro)
 
-# --- TELA DE HISTÓRICO REESTRUTURADA COM EDICAO E EXCLUSAO ---
+# --- PÁGINA DE HISTÓRICO (LISTAGEM, FILTROS, EDIÇÃO, DELEÇÃO) ---
 def pag_correcoes(dt):
     st.header("🛠️ Gerenciamento e Correção de Lançamentos")
+    st.markdown("Use esta tela para buscar registros, alterar dados nas células ou apagar linhas.")
     
     s = st.selectbox("Selecione o Setor:", ["lavagem", "lavados", "secagem", "pesagem", "dobragem"])
     
@@ -226,5 +227,3 @@ def pag_correcoes(dt):
     with col1:
         f_cliente = st.text_input("🔍 Filtrar por Cliente:")
     with col2:
-        f_colab = st.text_input("👤 Filtrar por Colaborador (Executante):")
-        
