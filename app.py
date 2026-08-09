@@ -3,31 +3,23 @@ import pandas as pd
 import datetime
 import psycopg2
 
-# Configuração da página precisa ser O PRIMEIRO comando Streamlit executado
 st.set_page_config(page_title="Controle Lavanderia", layout="wide")
 
 ITENS_DOBRAGEM = ["Lençol", "Fronha", "Capote", "Camisola", "Oleado", "Calça", "Camisa", "Cobertor", "Colcha", "Toalha", "Traçado"]
 
-# --- CONEXÃO COM O BANCO DE DADOS (SOB DEMANDA) ---
 def conectar_banco():
     try:
         if "banco_dados" in st.secrets and "uri" in st.secrets["banco_dados"]:
-            db_uri = st.secrets["banco_dados"]["uri"]
-            return psycopg2.connect(db_uri)
-        else:
-            st.error("⚠️ Configuração 'uri' não encontrada dentro do bloco 'banco_dados' nos Secrets!")
-            return None
+            return psycopg2.connect(st.secrets["banco_dados"]["uri"])
+        st.error("⚠️ Configuração 'uri' ausente nos Secrets!")
+        return None
     except Exception as e:
-        st.error(f"⚠️ Erro ao tentar conectar ao PostgreSQL: {e}")
+        st.error(f"⚠️ Erro de conexão: {e}")
         return None
 
-# Gravação Genérica no Banco SQL
 def registrar_dados_sql(tabela, colunas, dados):
     conexao = conectar_banco()
-    if conexao is None:
-        st.error("❌ Não foi possível gravar. Sem conexão com o banco.")
-        return
-        
+    if conexao is None: return
     try:
         cursor = conexao.cursor()
         placeholders = ", ".join(["%s"] * len(dados))
@@ -37,17 +29,13 @@ def registrar_dados_sql(tabela, colunas, dados):
         conexao.commit()
         st.success(f"✅ Gravado com sucesso em {tabela.capitalize()}!")
     except Exception as e:
-        st.error(f"❌ Erro ao salvar no banco: {e}")
+        st.error(f"❌ Erro ao salvar: {e}")
     finally:
-        if 'cursor' in locals() and cursor: cursor.close()
         if conexao: conexao.close()
 
-# --- BUSCA HISTÓRICO COM FILTROS AVANÇADOS ---
 def puxar_historico_filtrado_sql(tabela, filtro_cliente, filtro_colaborador):
     conexao = conectar_banco()
-    if conexao is None:
-        return pd.DataFrame()
-        
+    if conexao is None: return pd.DataFrame()
     try:
         query = f"SELECT * FROM {tabela} WHERE 1=1"
         params = []
@@ -58,88 +46,67 @@ def puxar_historico_filtrado_sql(tabela, filtro_cliente, filtro_colaborador):
             query += " AND executante ILIKE %s"
             params.append(f"%{filtro_colaborador}%")
         query += " ORDER BY id DESC LIMIT 50"
-        df = pd.read_sql_query(query, conexao, params=params)
-        return df
+        return pd.read_sql_query(query, conexao, params=params)
     except Exception as e:
-        st.error(f"❌ Erro ao buscar dados: {e}")
+        st.error(f"❌ Erro ao buscar: {e}")
         return pd.DataFrame()
     finally:
         if conexao: conexao.close()
 
-# --- SALVAR MODIFICAÇÕES (EDIÇÃO E EXCLUSÃO) ---
 def salvar_alteracoes_banco(tabela, df_original, e_editado):
     conexao = conectar_banco()
-    if conexao is None:
-        st.error("❌ Alterações não salvas. Sem conexão com o banco.")
-        return
-        
+    if conexao is None: return
     try:
         cursor = conexao.cursor()
         sucesso = False
-        
         if "deleted_rows" in e_editado and e_editado["deleted_rows"]:
             for indice in e_editado["deleted_rows"]:
-                id_registro = int(df_original.iloc[indice]["id"])
-                cursor.execute(f"DELETE FROM {tabela} WHERE id = %s", (id_registro,))
+                id_reg = int(df_original.iloc[indice]["id"])
+                cursor.execute(f"DELETE FROM {tabela} WHERE id = %s", (id_reg,))
             sucesso = True
-            
         if "edited_rows" in e_editado and e_editado["edited_rows"]:
-            for indice_str, mudancas in e_editado["edited_rows"].items():
-                indice = int(indice_str)
-                id_registro = int(df_original.iloc[indice]["id"])
-                for coluna, novo_valor in mudancas.items():
-                    if coluna == "id": continue 
-                    query = f"UPDATE {tabela} SET {coluna} = %s WHERE id = %s"
-                    cursor.execute(query, (novo_valor, id_registro))
+            for idx_str, mudancas in e_editado["edited_rows"].items():
+                id_reg = int(df_original.iloc[int(idx_str)]["id"])
+                for col, valor in mudancas.items():
+                    if col == "id": continue
+                    cursor.execute(f"UPDATE {tabela} SET {col} = %s WHERE id = %s", (valor, id_reg))
             sucesso = True
-            
         if sucesso:
             conexao.commit()
-            st.success("✅ Banco de dados updated com sucesso!")
+            st.success("✅ Alterações salvas!")
             st.rerun()
     except Exception as e:
         conexao.rollback()
-        st.error(f"❌ Erro ao salvar alterações: {e}")
+        st.error(f"❌ Erro ao atualizar: {e}")
     finally:
-        if 'cursor' in locals() and cursor: cursor.close()
         if conexao: conexao.close()
 
-# Gera relatórios consolidados usando queries SQL
 def gerar_relatorios_sql(filtro_cliente):
     conexao = conectar_banco()
-    if conexao is None:
-        return
-        
+    if conexao is None: return
     try:
         setores = ["lavagem", "lavados", "secagem", "pesagem", "dobragem"]
         df_geral = []
         for s in setores:
             query = f"SELECT executante, '{s}' as sector FROM {s}"
             if filtro_cliente:
-                query += f" WHERE cliente ILIKE %s"
-                df = pd.read_sql_query(query, conexao, params=(f"%{filtro_cliente}%",))
+                df = pd.read_sql_query(query + " WHERE cliente ILIKE %s", conexao, params=(f"%{filtro_cliente}%",))
             else:
                 df = pd.read_sql_query(query, conexao)
-            if not df.empty:
-                df_geral.append(df)
-                
+            if not df.empty: df_geral.append(df)
         st.subheader("1. Quantidade de Operações por Funcionário / Setor")
         if df_geral:
             res = pd.concat(df_geral, ignore_index=True).groupby(["executante", "sector"]).size().unstack(fill_value=0)
             res["Total Geral"] = res.sum(axis=1)
             st.dataframe(res, use_container_width=True)
         else:
-            st.info("Nenhum dado encontrado para gerar o resumo de funcionários.")
-            
+            st.info("Nenhum dado encontrado.")
         st.subheader("2. Total de Peças Dobradas por Cliente e Executante")
         cols_sql = ", ".join([it.lower().replace("ç", "c").replace("ã", "a") for it in ITENS_DOBRAGEM])
-        query_dob = f"SELECT cliente, executante, {cols_sql} FROM dobragem"
         if filtro_cliente:
-            query_dob += " WHERE cliente ILIKE %s"
-            df_dob = pd.read_sql_query(query_dob, conexao, params=(f"%{filtro_cliente}%",))
+            df_dob = pd.read_sql_query(f"SELECT cliente, executante, {cols_sql} FROM dobragem WHERE cliente ILIKE %s", conexao, params=(f"%{filtro_cliente}%",))
         else:
-            df_dob = pd.read_sql_query(query_dob, conexao)
-            
+            df_dob = pd.read_sql_query(f"SELECT cliente, executante, {cols_sql} FROM dobragem", conexao)
         if not df_dob.empty:
             mapeamento = {it.lower().replace("ç", "c").replace("ã", "a"): it for it in ITENS_DOBRAGEM}
             df_dob = df_dob.rename(columns=mapeamento)
@@ -147,13 +114,12 @@ def gerar_relatorios_sql(filtro_cliente):
             res_pecas["Total de Peças"] = res_pecas.sum(axis=1)
             st.dataframe(res_pecas, use_container_width=True)
         else:
-            st.info("Nenhum registro encontrado em Dobragem.")
+            st.info("Nenhum registro em Dobragem.")
     except Exception as e:
         st.error(f"Erro nos relatórios: {e}")
     finally:
         if conexao: conexao.close()
 
-# --- FORMULÁRIOS DE LANÇAMENTO ---
 def pag_lavagem(dt):
     st.header("Lançamento - Setor de Lavagem")
     with st.form("f_lav", clear_on_submit=True):
@@ -164,9 +130,7 @@ def pag_lavagem(dt):
         t = st.text_input("Horário Término")
         e = st.text_input("Executante")
         if st.form_submit_button("Gravar Lavagem"):
-            if c and e: 
-                colunas = ["cliente", "data", "maquina", "peso", "horario_inicio", "horario_termino", "executante"]
-                registrar_dados_sql("lavagem", colunas, [c, dt, m, p, i, t, e])
+            if c and e: registrar_dados_sql("lavagem", ["cliente", "data", "maquina", "peso", "horario_inicio", "horario_termino", "executante"], [c, dt, m, p, i, t, e])
             else: st.warning("Preencha Cliente e Executante.")
 
 def pag_lavados(dt):
@@ -179,9 +143,7 @@ def pag_lavados(dt):
         t = st.text_input("Horário Término")
         e = st.text_input("Executante")
         if st.form_submit_button("Gravar Lavados"):
-            if c and e: 
-                colunas = ["cliente", "data", "maquina", "peso", "horario_inicio", "horario_termino", "executante"]
-                registrar_dados_sql("lavados", colunas, [c, dt, m, p, i, t, e])
+            if c and e: registrar_dados_sql("lavados", ["cliente", "data", "maquina", "peso", "horario_inicio", "horario_termino", "executante"], [c, dt, m, p, i, t, e])
             else: st.warning("Preencha os campos obrigatórios.")
 
 def pag_secagem(dt):
@@ -193,9 +155,7 @@ def pag_secagem(dt):
         sai = st.text_input("Horário Saída")
         e = st.text_input("Executante")
         if st.form_submit_button("Gravar Secagem"):
-            if c and e: 
-                colunas = ["maquina", "cliente", "data", "horario_entrada", "horario_saida", "executante"]
-                registrar_dados_sql("secagem", colunas, [m, c, dt, ent, sai, e])
+            if c and e: registrar_dados_sql("secagem", ["maquina", "cliente", "data", "horario_entrada", "horario_saida", "executante"], [m, c, dt, ent, sai, e])
             else: st.warning("Preencha os campos obrigatórios.")
 
 def pag_pesagem(dt):
@@ -206,9 +166,7 @@ def pag_pesagem(dt):
         e = st.text_input("Executante")
         tipo = st.radio("Tipo de Operação", ["Normal", "Relave"])
         if st.form_submit_button("Gravar Pesagem"):
-            if c and e: 
-                colunas = ["cliente", "data", "pesagem", "executante", "tipo_operacao"]
-                registrar_dados_sql("pesagem", colunas, [c, dt, p, e, tipo])
+            if c and e: registrar_dados_sql("pesagem", ["cliente", "data", "pesagem", "executante", "tipo_operacao"], [c, dt, p, e, tipo])
             else: st.warning("Preencha os campos obrigatórios.")
 
 def pag_dobragem(dt):
@@ -220,10 +178,8 @@ def pag_dobragem(dt):
         qtds = {it: st.number_input(f"Qtd {it}:", min_value=0, step=1, key=f"d_{it}") for it in ITENS_DOBRAGEM}
         if st.form_submit_button("Gravar Dobragem"):
             if c and e:
-                colunas_itens = [it.lower().replace("ç", "c").replace("ã", "a") for it in ITENS_DOBRAGEM]
-                colunas = ["cliente", "data", "executante"] + colunas_itens
-                valores = [c, dt, e] + [int(qtds[it]) for it in ITENS_DOBRAGEM]
-                registrar_dados_sql("dobragem", colunas, valores)
+                cols_it = [it.lower().replace("ç", "c").replace("ã", "a") for it in ITENS_DOBRAGEM]
+                registrar_dados_sql("dobragem", ["cliente", "data", "executante"] + cols_it, [c, dt, e] + [int(qtds[it]) for it in ITENS_DOBRAGEM])
             else: st.warning("Preencha Cliente e Executante.")
 
 def pag_analises(dt):
@@ -232,3 +188,31 @@ def pag_analises(dt):
     gerar_relatorios_sql(filtro)
 
 def pag_correcoes(dt):
+    st.header("🛠️ Gerenciamento e Correção de Lançamentos")
+    st.markdown("Altere os dados nas células ou apague linhas usando a tecla Delete.")
+    s = st.selectbox("Selecione o Setor:", ["lavagem", "lavados", "secagem", "pesagem", "dobragem"])
+    f_cliente = st.text_input("🔍 Filtrar por Cliente:")
+    f_colab = st.text_input("👤 Filtrar por Colaborador (Executante):")
+    df_dados = puxar_historico_filtrado_sql(s, f_cliente, f_colab)
+    if not df_dados.empty:
+        dados_editados = st.data_editor(df_dados, use_container_width=True, num_rows="dynamic", disabled=["id"], key=f"ed_{s}")
+        mudancas = st.session_state.get(f"ed_{s}", {})
+        houve_mudanca = len(mudancas.get("edited_rows", {})) > 0 or len(mudancas.get("deleted_rows", [])) > 0
+        if houve_mudanca:
+            st.warning("⚠️ Alterações pendentes!")
+            if st.button("💾 CONFIRMAR E SALVAR ALTERAÇÕES NO BANCO"):
+                salvar_alteracoes_banco(s, df_dados, mudancas)
+    else:
+        st.info("Nenhum registro encontrado ou banco indisponível.")
+
+st.sidebar.title("🧼 Navegação")
+opcoes_menu = {
+    "Lavagem": pag_lavagem, 
+    "Lavados": pag_lavados, 
+    "Secagem": pag_secagem,
+    "Pesagem": pag_pesagem, 
+    "Dobragem": pag_dobragem, 
+    "📊 Resumos e Análises": pag_analises,
+    "🛠️ Histórico": pag_correcoes
+}
+menu = st.sidebar.radio("Selecione o Setor:", list(opcoes_menu.keys()), key="nav_p")
