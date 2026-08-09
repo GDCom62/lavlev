@@ -169,11 +169,51 @@ def pag_analises(dt):
     if st.button("Gerar / Atualizar Relatórios"): 
         gerar_relatorios_sql(filtro)
 
+# --- REESTRUTURADO: PÁGINA DE CORREÇÕES (LISTAGEM, FILTRO, EDIÇÃO, DELEÇÃO) ---
 def pag_correcoes(dt):
-    st.header("🛠️ Histórico de Lançamentos")
-    s = st.selectbox("Setor:", ["lavagem", "lavados", "secagem", "pesagem", "dobragem"])
-    if st.button("Visualizar Últimas Linhas"): 
-        puxar_historico_sql(s)
+    st.header("🛠️ Gerenciamento e Correção de Lançamentos")
+    
+    # Menu de seleção do setor
+    s = st.selectbox("Selecione o Setor:", ["lavagem", "lavados", "secagem", "pesagem", "dobragem"])
+    
+    # Bloco visual de filtros
+    col1, col2 = st.columns(2)
+    with col1:
+        f_cliente = st.text_input("🔍 Filtrar por Cliente:")
+    with col2:
+        f_colab = st.text_input("👤 Filtrar por Colaborador (Executante):")
+        
+    # Carrega os dados filtrados do PostgreSQL
+    df_dados = puxar_historico_filtrado_sql(s, f_cliente, f_colab)
+    
+    if not df_dados.empty:
+        # --- EXPLICAÇÃO VISUAL DOS COMANDOS PARA O USUÁRIO ---
+        st.markdown("""
+        ### 📋 Instruções de Comando:
+        * ✏️ **Para Editar:** Clique duas vezes em qualquer célula da tabela abaixo, mude o valor e aperte *Enter*.
+        * ❌ **Para Excluir:** Clique no quadradinho (caixa de seleção) no início da linha correspondente e aperte a tecla **Delete** do seu teclado.
+        """)
+        
+        # O data_editor ativa a edição visual e a lixeira para deleção de linhas
+        dados_editados = st.data_editor(
+            df_dados, 
+            use_container_width=True, 
+            num_rows="dynamic", # Permite que o usuário Delete linhas selecionando e usando a tecla 'Delete'
+            disabled=["id"], # Impede edição da Chave Primária por segurança
+            key="editor_dados_lavanderia"
+        )
+        
+        # VERIFICAÇÃO SE HOUVE MODIFICAÇÕES
+        mudancas = st.session_state.editor_dados_lavanderia
+        houve_mudanca = len(mudancas.get("edited_rows", {})) > 0 or len(mudancas.get("deleted_rows", [])) > 0
+        
+        # O botão de confirmação só aparece se você fizer alguma alteração ou deleção na planilha acima
+        if houve_mudanca:
+            st.warning("⚠️ Você possui alterações pendentes na tabela!")
+            if st.button("💾 CONFIRMAR E SALVAR ALTERAÇÕES NO BANCO"):
+                salvar_alteracoes_banco(s, df_dados, mudancas)
+    else:
+        st.info("Nenhum registro encontrado com os filtros aplicados.")
 
 # --- CORPO PRINCIPAL INTERFACE ---
 st.set_page_config(page_title="Controle Lavanderia", layout="wide")
