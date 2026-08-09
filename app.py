@@ -37,7 +37,7 @@ def registrar_dados_sql(tabela, colunas, dados):
         if 'cursor' in locals(): cursor.close()
         if 'conexao' in locals(): conexao.close()
 
-# --- BUSCA HISTÓRICO COM FILTROS AVANÇADOS ---
+# --- NOVO: BUSCA HISTÓRICO COM FILTROS AVANÇADOS ---
 def puxar_historico_filtrado_sql(tabela, filtro_cliente, filtro_colaborador):
     try:
         conexao = conectar_banco()
@@ -61,7 +61,7 @@ def puxar_historico_filtrado_sql(tabela, filtro_cliente, filtro_colaborador):
     finally:
         if 'conexao' in locals(): conexao.close()
 
-# --- SALVAR MODIFICAÇÕES (EDIÇÃO E EXCLUSÃO) ---
+# --- NOVO: SALVAR MODIFICAÇÕES (EDIÇÃO E EXCLUSÃO) ---
 def salvar_alteracoes_banco(tabela, df_original, e_editado):
     conexao = conectar_banco()
     cursor = conexao.cursor()
@@ -82,6 +82,7 @@ def salvar_alteracoes_banco(tabela, df_original, e_editado):
                 id_registro = int(df_original.iloc[indice]["id"])
                 
                 for coluna, novo_valor in mudancas.items():
+                    # Evita alterar a coluna ID por segurança
                     if coluna == "id": continue 
                     
                     query = f"UPDATE {tabela} SET {coluna} = %s WHERE id = %s"
@@ -91,7 +92,6 @@ def salvar_alteracoes_banco(tabela, df_original, e_editado):
         if sucesso:
             conexao.commit()
             st.success("✅ Banco de dados atualizado com sucesso!")
-            st.session_state["precisa_recarregar"] = True
             st.rerun()
             
     except Exception as e:
@@ -210,20 +210,20 @@ def pag_dobragem(dt):
                 registrar_dados_sql("dobragem", colunas, valores)
             else: st.warning("Preencha Cliente e Executante.")
 
-def pag_analises(dt): 
+def pag_analises(dt):
     st.header("📊 Painel Estatístico e Resumos")
     filtro = st.text_input("🔍 Filtrar por Cliente (Vazio para todos)")
     if st.button("Gerar / Atualizar Relatórios"): 
         gerar_relatorios_sql(filtro)
 
-# --- PÁGINA DE HISTÓRICO (LISTAGEM, FILTROS, EDIÇÃO, DELEÇÃO) ---
+# --- REESTRUTURADO: PÁGINA DE CORREÇÕES (LISTAGEM, FILTRO, EDIÇÃO, DELEÇÃO) ---
 def pag_correcoes(dt):
     st.header("🛠️ Gerenciamento e Correção de Lançamentos")
     st.markdown("Use esta tela para buscar registros, alterar dados nas células ou apagar linhas.")
     
+    # Menu de seleção do setor
     s = st.selectbox("Selecione o Setor:", ["lavagem", "lavados", "secagem", "pesagem", "dobragem"])
     
+    # Bloco visual de filtros
     col1, col2 = st.columns(2)
     with col1:
-        f_cliente = st.text_input("🔍 Filtrar por Cliente:")
-    with col2:
