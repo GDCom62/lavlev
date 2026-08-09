@@ -28,7 +28,8 @@ def registrar_dados_sql(tabela, colunas, dados):
         cursor.execute(query, dados)
         conexao.commit()
         st.success(f"✅ Gravado com sucesso em {tabela.capitalize()}!")
-    except Exception as e: st.error(f"❌ Erro ao salvar: {e}")
+    except Exception as e:
+        st.error(f"❌ Erro ao salvar: {e}")
     finally:
         if conexao: conexao.close()
 
@@ -99,7 +100,8 @@ def gerar_relatorios_sql(filtro_cliente):
             res = pd.concat(df_geral, ignore_index=True).groupby(["executante", "sector"]).size().unstack(fill_value=0)
             res["Total Geral"] = res.sum(axis=1)
             st.dataframe(res, use_container_width=True)
-        else: st.info("Nenhum dado encontrado para gerar relatórios operacionais.")
+        else:
+            st.info("Nenhum dado encontrado para gerar relatórios operacionais.")
         st.subheader("2. Total de Peças Dobradas por Cliente e Executante")
         cols_sql = ", ".join([it.lower().replace("ç", "c").replace("ã", "a") for it in ITENS_DOBRAGEM])
         query_dob = f"SELECT cliente, executante, {cols_sql} FROM dobragem"
@@ -114,8 +116,10 @@ def gerar_relatorios_sql(filtro_cliente):
             res_pecas = df_dob.groupby(["cliente", "executante"]).sum()
             res_pecas["Total de Peças"] = res_pecas.sum(axis=1)
             st.dataframe(res_pecas, use_container_width=True)
-        else: st.info("Nenhum registro de dobras encontrado.")
-    except Exception as e: st.error(f"Erro nos relatórios: {e}")
+        else:
+            st.info("Nenhum registro de dobras encontrado.")
+    except Exception as e:
+        st.error(f"Erro nos relatórios: {e}")
     finally:
         if conexao: conexao.close()
 
@@ -192,7 +196,9 @@ def pag_correcoes(dt):
     s = st.selectbox("Selecione o Setor para visualização:", ["lavagem", "lavados", "secagem", "pesagem", "dobragem"])
     f_cliente = st.text_input("🔍 Filtrar por Cliente (Opcional):")
     f_colab = st.text_input("👤 Filtrar por Colaborador / Executante (Opcional):")
+    
     df_dados = puxar_historico_filtrado_sql(s, f_cliente, f_colab)
+    
     if df_dados is not None and not df_dados.empty:
         st.markdown("### 📋 Dados Encontrados no Banco:")
         dados_editados = st.data_editor(df_dados, use_container_width=True, num_rows="dynamic", disabled=["id"], key=f"ed_{s}")
@@ -201,9 +207,8 @@ def pag_correcoes(dt):
             st.warning("⚠️ Existem alterações não salvas nesta tabela!")
             if st.button("💾 CONFIRMAR E SALVAR ALTERAÇÕES NO BANCO"):
                 salvar_alteracoes_banco(s, df_dados, mudancas)
-    else: st.info(f"Nenhum registro encontrado na tabela '{s}' com os filtros informados.")
+    else:
+        st.info(f"Nenhum registro encontrado na tabela '{s}' com os filtros informados.")
 
 st.sidebar.title("🧼 Navegação")
 opcoes_menu = {
-    "Lavagem": pag_lavagem, 
-    "Lavados": pag_lavados, 
