@@ -18,6 +18,52 @@ def abrir_conexao_banco():
         st.error(f"⚠️ Erro na conexão do banco: {e}")
         return None
 
+# --- FUNÇÃO AUXILIAR PARA GERAR RELATÓRIOS ---
+def rodar_relatorios_operacionais(filtro):
+    db_conexao = abrir_conexao_banco()
+    if not db_conexao:
+        return
+    try:
+        setores = ["lavagem", "lavados", "secagem", "pesagem", "dobragem"]
+        df_geral = []
+        for s in setores:
+            query = f"SELECT executante, '{s}' as sector FROM {s}"
+            params = []
+            if filtro:
+                query += " WHERE cliente ILIKE %s"
+                params.append(f"%{filtro}%")
+            df_sec = pd.read_sql_query(query, db_conexao, params=params if filtro else None)
+            if not df_sec.empty:
+                df_geral.append(df_sec)
+        st.subheader("1. Quantidade de Operações por Funcionário / Setor")
+        if df_geral:
+            res = pd.concat(df_geral, ignore_index=True).groupby(["executante", "sector"]).size().unstack(fill_value=0)
+            res["Total Geral"] = res.sum(axis=1)
+            st.dataframe(res, use_container_width=True)
+        else:
+            st.info("Nenhum dado encontrado para gerar relatórios operacionais.")
+            
+        st.subheader("2. Total de Peças Dobradas por Cliente e Executante")
+        cols_sql = ", ".join([it.lower().replace("ç", "c").replace("ã", "a") for it in ITENS_DOBRAGEM])
+        query_dob = f"SELECT cliente, executante, {cols_sql} FROM dobragem"
+        params_dob = []
+        if filtro:
+            query_dob += " WHERE cliente ILIKE %s"
+            params_dob.append(f"%{filtro}%")
+        df_dob = pd.read_sql_query(query_dob, db_conexao, params=params_dob if filtro else None)
+        if not df_dob.empty:
+            mapeamento = {it.lower().replace("ç", "c").replace("ã", "a"): it for it in ITENS_DOBRAGEM}
+            df_dob = df_dob.rename(columns=mapeamento)
+            res_pecas = df_dob.groupby(["cliente", "executante"]).sum()
+            res_pecas["Total de Peças"] = res_pecas.sum(axis=1)
+            st.dataframe(res_pecas, use_container_width=True)
+        else:
+            st.info("Nenhum registro de dobras encontrado.")
+    except Exception as err:
+        st.error(f"Erro nos relatórios: {err}")
+    finally:
+        db_conexao.close()
+
 # --- FUNÇÃO ISOLADA PARA SALVAR ALTERAÇÕES DO HISTÓRICO ---
 def executar_salvamento_historico(tabela, df_com_checkboxes, mudancas_editor):
     db = abrir_conexao_banco()
@@ -25,23 +71,17 @@ def executar_salvamento_historico(tabela, df_com_checkboxes, mudancas_editor):
         return
     try:
         cursor = db.cursor()
-        
-        # 1. Processar Exclusões (Pelas caixas de seleção marcadas como True)
         if "edited_rows" in mudancas_editor:
             for idx_str, campos in mudancas_editor["edited_rows"].items():
                 if campos.get("Selecionar para Excluir") is True:
                     id_reg = int(df_com_checkboxes.iloc[int(idx_str)]["id"])
                     cursor.execute(f"DELETE FROM {tabela} WHERE id = %s", (id_reg,))
-        
-        # 2. Processar Edições (Apenas nas linhas que não foram excluídas)
-        if "edited_rows" in mudancas_editor:
             for idx_str, campos in mudancas_editor["edited_rows"].items():
                 if campos.get("Selecionar para Excluir") is not True:
                     id_reg = int(df_com_checkboxes.iloc[int(idx_str)]["id"])
                     for col, valor in campos.items():
                         if col != "id" and col != "Selecionar para Excluir":
                             cursor.execute(f"UPDATE {tabela} SET {col} = %s WHERE id = %s", (valor, id_reg))
-                        
         db.commit()
         st.success("✅ Banco de dados atualizado com sucesso!")
         st.rerun()
@@ -173,40 +213,7 @@ if menu == "Dobragem":
 if menu == "📊 Resumos e Análises":
     st.header("📊 Painel Estatístico e Resumos")
     filtro = st.text_input("🔍 Filtrar por Cliente (Vazio para todos)", key="an_filtro")
-    db_conexao = abrir_conexao_banco()
-    if db_conexao:
-        try:
-            setores = ["lavagem", "lavados", "secagem", "pesagem", "dobragem"]
-            df_geral = []
-            for s in setores:
-                query = f"SELECT executante, '{s}' as sector FROM {s}"
-                params = []
-                if filtro:
-                    query += " WHERE cliente ILIKE %s"
-                    params.append(f"%{filtro}%")
-                df_sec = pd.read_sql_query(query, db_conexao, params=params if filtro else None)
-                if not df_sec.empty:
-                    df_geral.append(df_sec)
-            st.subheader("1. Quantidade de Operações por Funcionário / Setor")
-            if df_geral:
-                res = pd.concat(df_geral, ignore_index=True).groupby(["executante", "sector"]).size().unstack(fill_value=0)
-                res["Total Geral"] = res.sum(axis=1)
-                st.dataframe(res, use_container_width=True)
-            else:
-                st.info("Nenhum dado encontrado para gerar relatórios operacionais.")
-            st.subheader("2. Total de Peças Dobradas por Cliente e Executante")
-            cols_sql = ", ".join([it.lower().replace("ç", "c").replace("ã", "a") for it in ITENS_DOBRAGEM])
-            query_dob = f"SELECT cliente, executante, {cols_sql} FROM dobragem"
-            params_dob = []
-            if filtro:
-                query_dob += " WHERE cliente ILIKE %s"
-                params_dob.append(f"%{filtro}%")
-            df_dob = pd.read_sql_query(query_dob, db_conexao, params=params_dob if filtro else None)
-            if not df_dob.empty:
-                mapeamento = {it.lower().replace("ç", "c").replace("ã", "a"): it for it in ITENS_DOBRAGEM}
-                df_dob = df_dob.rename(columns=mapeamento)
-                res_pecas = df_dob.groupby(["cliente", "executante"]).sum()
-                res_pecas["Total de Peças"] = res_pecas.sum(axis=1)
-                st.dataframe(res_pecas, use_container_width=True)
-            else:
-                st.info("Nenhum registro de dobras encontrado.")
+    rodar_relatorios_operacionais(filtro)
+
+# --- FLUXO 7: GERENCIAMENTO E HISTÓRICO ---
+if menu == "🛠️ Histórico":
