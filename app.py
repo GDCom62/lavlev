@@ -6,7 +6,6 @@ import psycopg2
 ITENS_DOBRAGEM = ["Lençol", "Fronha", "Capote", "Camisola", "Oleado", "Calça", "Camisa", "Cobertor", "Colcha", "Toalha", "Traçado"]
 
 # --- LEITURA AUTOMÁTICA DO SEGREDO ---
-# O Streamlit busca isso direto nas configurações de 'Secrets' salvas na nuvem
 try:
     DB_URI = st.secrets["banco_dados"]["uri"]
 except Exception:
@@ -38,21 +37,69 @@ def registrar_dados_sql(tabela, colunas, dados):
         if 'cursor' in locals(): cursor.close()
         if 'conexao' in locals(): conexao.close()
 
-# Puxa o histórico de um setor específico
-def puxar_historico_sql(tabela):
+# Busca Histórico com Filtros Dinâmicos (Cliente e Colaborador)
+def puxar_historico_filtrado_sql(tabela, filtro_cliente, filtro_colaborador):
     try:
         conexao = conectar_banco()
-        query = f"SELECT * FROM {tabela} ORDER BY id DESC LIMIT 10"
-        df = pd.read_sql_query(query, conexao)
+        query = f"SELECT * FROM {tabela} WHERE 1=1"
+        params = []
         
-        if df.empty:
-            st.info("Tabela vazia sem registros.")
-        else:
-            st.dataframe(df, use_container_width=True)
+        if filtro_cliente:
+            query += " AND cliente ILIKE %s"
+            params.append(f"%{filtro_cliente}%")
+        if filtro_colaborador:
+            query += " AND executante ILIKE %s"
+            params.append(f"%{filtro_colaborador}%")
+            
+        query += " ORDER BY id DESC LIMIT 50"
+        
+        df = pd.read_sql_query(query, conexao, params=params)
+        return df
     except Exception as e:
-        st.error(f"❌ Erro ao buscar histórico: {e}")
+        st.error(f"❌ Erro ao buscar dados: {e}")
+        return pd.DataFrame()
     finally:
         if 'conexao' in locals(): conexao.close()
+
+# Salvar Modificações de Edição e Exclusão no Banco
+def salvar_alteracoes_banco(tabela, df_original, e_editado):
+    conexao = conectar_banco()
+    cursor = conexao.cursor()
+    sucesso = False
+    
+    try:
+        # 1. Processar Linhas Deletadas
+        if "deleted_rows" in e_editado and e_editado["deleted_rows"]:
+            for indice in e_editado["deleted_rows"]:
+                id_registro = int(df_original.iloc[indice]["id"])
+                cursor.execute(f"DELETE FROM {tabela} WHERE id = %s", (id_registro,))
+            sucesso = True
+
+        # 2. Processar Linhas Editadas
+        if "edited_rows" in e_editado and e_editado["edited_rows"]:
+            for indice_str, mudancas in e_editado["edited_rows"].items():
+                indice = int(indice_str)
+                id_registro = int(df_original.iloc[indice]["id"])
+                
+                for coluna, novo_valor in mudancas.items():
+                    if coluna == "id": continue 
+                    
+                    query = f"UPDATE {tabela} SET {coluna} = %s WHERE id = %s"
+                    cursor.execute(query, (novo_valor, id_registro))
+            sucesso = True
+            
+        if sucesso:
+            conexao.commit()
+            st.success("✅ Banco de dados atualizado com sucesso!")
+            st.session_state["precisa_recarregar"] = True
+            st.rerun()
+            
+    except Exception as e:
+        conexao.rollback()
+        st.error(f"❌ Erro ao salvar alterações: {e}")
+    finally:
+        cursor.close()
+        conexao.close()
 
 # Gera relatórios consolidados usando queries SQL
 def gerar_relatorios_sql(filtro_cliente):
@@ -62,7 +109,7 @@ def gerar_relatorios_sql(filtro_cliente):
         df_geral = []
         
         for s in setores:
-            query = f"SELECT executante, '{s}' as setor FROM {s}"
+            query = f"SELECT executante, '{s}' as sector FROM {s}"
             if filtro_cliente:
                 query += f" WHERE cliente ILIKE %s"
                 df = pd.read_sql_query(query, conexao, params=(f"%{filtro_cliente}%",))
@@ -74,7 +121,7 @@ def gerar_relatorios_sql(filtro_cliente):
 
         st.subheader("1. Quantidade de Operações por Funcionário / Setor")
         if df_geral:
-            res = pd.concat(df_geral, ignore_index=True).groupby(["executante", "setor"]).size().unstack(fill_value=0)
+            res = pd.concat(df_geral, ignore_index=True).groupby(["executante", "sector"]).size().unstack(fill_value=0)
             res["Total Geral"] = res.sum(axis=1)
             st.dataframe(res, use_container_width=True)
         else:
@@ -94,7 +141,7 @@ def gerar_relatorios_sql(filtro_cliente):
             mapeamento = {it.lower().replace("ç", "c").replace("ã", "a"): it for it in ITENS_DOBRAGEM}
             df_dob = df_dob.rename(columns=mapeamento)
             
-            res_pecas = df_dob.groupby(["Cliente", "executante"]).sum()
+            res_pecas = df_dob.groupby(["cliente", "executante"]).sum()
             res_pecas["Total de Peças"] = res_pecas.sum(axis=1)
             st.dataframe(res_pecas, use_container_width=True)
         else:
@@ -169,118 +216,15 @@ def pag_analises(dt):
     if st.button("Gerar / Atualizar Relatórios"): 
         gerar_relatorios_sql(filtro)
 
-# --- REESTRUTURADO: PÁGINA DE CORREÇÕES (LISTAGEM, FILTRO, EDIÇÃO, DELEÇÃO) ---
+# --- TELA DE HISTÓRICO REESTRUTURADA COM EDICAO E EXCLUSAO ---
 def pag_correcoes(dt):
     st.header("🛠️ Gerenciamento e Correção de Lançamentos")
     
-    # Menu de seleção do setor
     s = st.selectbox("Selecione o Setor:", ["lavagem", "lavados", "secagem", "pesagem", "dobragem"])
     
-    # Bloco visual de filtros
     col1, col2 = st.columns(2)
     with col1:
         f_cliente = st.text_input("🔍 Filtrar por Cliente:")
     with col2:
         f_colab = st.text_input("👤 Filtrar por Colaborador (Executante):")
         
-    # Carrega os dados filtrados do PostgreSQL
-    df_dados = puxar_historico_filtrado_sql(s, f_cliente, f_colab)
-    
-    if not df_dados.empty:
-        # --- EXPLICAÇÃO VISUAL DOS COMANDOS PARA O USUÁRIO ---
-        st.markdown("""
-        ### 📋 Instruções de Comando:
-        * ✏️ **Para Editar:** Clique duas vezes em qualquer célula da tabela abaixo, mude o valor e aperte *Enter*.
-        * ❌ **Para Excluir:** Clique no quadradinho (caixa de seleção) no início da linha correspondente e aperte a tecla **Delete** do seu teclado.
-        """)
-        
-        # O data_editor ativa a edição visual e a lixeira para deleção de linhas
-        dados_editados = st.data_editor(
-            df_dados, 
-            use_container_width=True, 
-            num_rows="dynamic", # Permite que o usuário Delete linhas selecionando e usando a tecla 'Delete'
-            disabled=["id"], # Impede edição da Chave Primária por segurança
-            key="editor_dados_lavanderia"
-        )
-        
-        # VERIFICAÇÃO SE HOUVE MODIFICAÇÕES
-        mudancas = st.session_state.editor_dados_lavanderia
-        houve_mudanca = len(mudancas.get("edited_rows", {})) > 0 or len(mudancas.get("deleted_rows", [])) > 0
-        
-        # O botão de confirmação só aparece se você fizer alguma alteração ou deleção na planilha acima
-        if houve_mudanca:
-            st.warning("⚠️ Você possui alterações pendentes na tabela!")
-            if st.button("💾 CONFIRMAR E SALVAR ALTERAÇÕES NO BANCO"):
-                salvar_alteracoes_banco(s, df_dados, mudancas)
-    else:
-        st.info("Nenhum registro encontrado com os filtros aplicados.")
-
-# --- CORPO PRINCIPAL INTERFACE ---
-st.set_page_config(page_title="Controle Lavanderia", layout="wide")
-
-# Limpa o estado de recarregamento se ele existir
-if st.session_state.get("precisa_recarregar", False):
-    st.session_state["precisa_recarregar"] = False
-
-st.sidebar.title("🧼 Navegação")
-opcoes_menu = {
-    "Lavagem": pag_lavagem, 
-    "Lavados": pag_lavados, 
-    "Secagem": pag_secagem,
-    "Pesagem": pag_pesagem, 
-    "Dobragem": pag_dobragem, 
-    "📊 Resumos e Análises": pag_analises,
-    "🛠️ Histórico": pag_correcoes
-}
-
-# Adicionado o parâmetro key="menu_navegacao_principal" para fixar o ID único do componente
-menu = st.sidebar.radio("Selecione o Setor:", list(opcoes_menu.keys()), key="menu_navegacao_principal")
-
-st.sidebar.markdown("---")
-dt_global = st.sidebar.date_input("Data do Lançamento:", datetime.date.today())
-
-# Executa a página enviando a data global escolhida na barra lateral
-opcoes_menu[menu](dt_global)
-
-# --- SALVAR MODIFICAÇÕES (EDIÇÃO E EXCLUSÃO) ---
-def salvar_alteracoes_banco(tabela, df_original, e_editado):
-    conexao = conectar_banco()
-    cursor = conexao.cursor()
-    sucesso = False
-    
-    try:
-        # 1. Processar Linhas Deletadas
-        if "deleted_rows" in e_editado and e_editado["deleted_rows"]:
-            for indice in e_editado["deleted_rows"]:
-                id_registro = int(df_original.iloc[indice]["id"])
-                cursor.execute(f"DELETE FROM {tabela} WHERE id = %s", (id_registro,))
-            sucesso = True
-
-        # 2. Processar Linhas Editadas
-        if "edited_rows" in e_editado and e_editado["edited_rows"]:
-            for indice_str, mudancas in e_editado["edited_rows"].items():
-                indice = int(indice_str)
-                id_registro = int(df_original.iloc[indice]["id"])
-                
-                for coluna, novo_valor in mudancas.items():
-                    if coluna == "id": continue 
-                    
-                    query = f"UPDATE {tabela} SET {coluna} = %s WHERE id = %s"
-                    cursor.execute(query, (novo_valor, id_registro))
-            sucesso = True
-            
-        if sucesso:
-            conexao.commit()
-            st.success("✅ Banco de dados atualizado com sucesso!")
-            # Criamos uma flag temporária para recarregar sem quebrar o ID do rádio
-            st.session_state["precisa_recarregar"] = True
-            st.rerun()
-            
-    except Exception as e:
-        conexao.rollback()
-        st.error(f"❌ Erro ao salvar alterações: {e}")
-    finally:
-        cursor.close()
-        conexao.close()
-
-
