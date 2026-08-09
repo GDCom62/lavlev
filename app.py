@@ -182,7 +182,7 @@ def tela_analises(dt):
         except Exception as err: st.error(f"Erro nos relatórios: {err}")
         finally: db.close()
 
-def tela_historico(dt):
+def tela_historico(dt): 
     st.header("🛠️ Gerenciamento e Correção de Lançamentos")
     st.markdown("✏️ **Para Editar:** Clique duas vezes em qualquer campo, mude o valor e aperte Enter.")
     st.markdown("❌ **Para Excluir:** Marque a caixinha **'Selecionar para Excluir'** na linha desejada.")
