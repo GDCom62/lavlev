@@ -93,7 +93,7 @@ def salvar_alteracoes_banco(tabela, df_original, e_editado):
                     cursor.execute(query, (novo_valor, id_registro))
             sucesso = True
             
-        if sucesso:
+        if success:
             conexao.commit()
             st.success("✅ Banco de dados atualizado com sucesso!")
             st.rerun()
